@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V-AI Recruiter — Tuyển dụng thông minh hơn với AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B1220;
+    --navy:#101B33;
+    --paper:#F5F7FA;
+    --card:#FFFFFF;
+    --teal:#0FB88A;
+    --teal-dark:#0A8F6A;
+    --amber:#F5A623;
+    --line:#E3E7EE;
+    --muted:#5B6472;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{
+    font-family:'Space Grotesk',sans-serif;
+    letter-spacing:-0.02em;
+  }
+  .mono{font-family:'JetBrains Mono',monospace;}
+  a{color:inherit;text-decoration:none;}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px;}
+
+  /* NAV */
+  header{
+    position:sticky;top:0;z-index:50;
+    background:rgba(245,247,250,0.85);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  nav{display:flex;align-items:center;justify-content:space-between;padding:16px 0;}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;}
+  .logo-mark{
+    width:32px;height:32px;border-radius:9px;
+    background:var(--ink);
+    display:flex;align-items:center;justify-content:center;
+    position:relative;overflow:hidden;
+  }
+  .logo-mark::after{
+    content:"";position:absolute;inset:0;
+    background:linear-gradient(135deg,var(--teal),transparent 60%);
+    opacity:.8;
+  }
+  .logo-mark svg{position:relative;z-index:1;}
+  .nav-links{display:flex;gap:32px;font-size:14.5px;font-weight:500;color:var(--muted);}
+  .nav-links a:hover{color:var(--ink);}
+  .nav-cta{display:flex;align-items:center;gap:14px;}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    padding:11px 20px;border-radius:8px;font-weight:600;font-size:14.5px;
+    border:1px solid transparent;cursor:pointer;transition:.15s ease;
+    white-space:nowrap;
+  }
+  .btn-primary{background:var(--ink);color:#fff;}
+  .btn-primary:hover{background:var(--teal-dark);}
+  .btn-ghost{color:var(--muted);}
+  .btn-ghost:hover{color:var(--ink);}
+  .btn-outline{border-color:var(--line);color:var(--ink);background:#fff;}
+  .btn-outline:hover{border-color:var(--ink);}
+
+  /* HERO */
+  .hero{padding:88px 0 60px;position:relative;overflow:hidden;}
+  .hero-grid{display:grid;grid-template-columns:1.05fr 0.95fr;gap:56px;align-items:center;}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    background:#fff;border:1px solid var(--line);
+    padding:6px 14px;border-radius:100px;
+    font-size:13px;font-weight:600;color:var(--teal-dark);
+    margin-bottom:22px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);}
+  .hero h1{font-size:52px;line-height:1.05;font-weight:700;margin:0 0 20px;}
+  .hero h1 .accent{color:var(--teal-dark);position:relative;}
+  .hero p.lead{font-size:17.5px;color:var(--muted);max-width:460px;line-height:1.6;margin:0 0 32px;}
+  .hero-actions{display:flex;gap:14px;margin-bottom:44px;}
+  .hero-stats{display:flex;gap:36px;}
+  .hero-stats div{border-left:2px solid var(--line);padding-left:14px;}
+  .hero-stats b{display:block;font-size:22px;font-family:'Space Grotesk';}
+  .hero-stats span{font-size:12.5px;color:var(--muted);}
+
+  /* Signature panel: CV scan card */
+  .scan-card{
+    background:var(--navy);
+    border-radius:20px;
+    padding:22px;
+    color:#fff;
+    position:relative;
+    box-shadow:0 24px 60px -20px rgba(16,27,51,0.5);
+    overflow:hidden;
+  }
+  .scan-card::before{
+    content:"";position:absolute;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--teal),transparent);
+    top:0; animation:scanline 3.2s linear infinite;
+    box-shadow:0 0 16px 2px rgba(15,184,138,0.7);
+  }
+  @keyframes scanline{
+    0%{top:0;opacity:0;}
+    8%{opacity:1;}
+    92%{opacity:1;}
+    100%{top:100%;opacity:0;}
+  }
+  .scan-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;}
+  .scan-head h4{margin:0;font-size:15px;}
+  .scan-head p{margin:2px 0 0;font-size:12.5px;color:#9AA5B8;}
+  .badge-processing{
+    background:rgba(15,184,138,0.15);color:var(--teal);
+    font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:100px;
+    display:flex;align-items:center;gap:6px;
+  }
+  .badge-processing .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .progress-row{font-size:12.5px;color:#9AA5B8;display:flex;justify-content:space-between;margin-bottom:6px;}
+  .progress-bar{height:6px;background:rgba(255,255,255,0.08);border-radius:100px;overflow:hidden;margin-bottom:20px;}
+  .progress-bar i{display:block;height:100%;width:73%;background:linear-gradient(90deg,var(--teal),#5EEAC0);border-radius:100px;}
+
+  .candidate-main{
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:14px;padding:16px;margin-bottom:14px;
+  }
+  .cand-top{display:flex;gap:12px;align-items:center;margin-bottom:12px;}
+  .avatar{
+    width:40px;height:40px;border-radius:10px;
+    background:linear-gradient(135deg,var(--teal),#1C4E8C);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;
+  }
+  .cand-top h5{margin:0;font-size:14.5px;}
+  .cand-top p{margin:2px 0 0;font-size:12px;color:#9AA5B8;}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;}
+  .tag{
+    font-size:11px;padding:4px 9px;border-radius:6px;
+    background:rgba(255,255,255,0.06);color:#C7CEDA;
+    font-family:'JetBrains Mono';
+  }
+  .score-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .score-row span{font-size:12px;color:#9AA5B8;}
+  .score-ring{
+    width:52px;height:52px;border-radius:50%;
+    background:conic-gradient(var(--teal) 0deg 331deg, rgba(255,255,255,0.08) 331deg 360deg);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Space Grotesk';font-weight:700;font-size:13px;
+  }
+  .score-ring i{
+    width:42px;height:42px;border-radius:50%;background:var(--navy);
+    display:flex;align-items:center;justify-content:center;font-style:normal;
+  }
+  .subscores{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px;color:#9AA5B8;}
+  .subscores b{display:block;color:#fff;font-size:13px;font-family:'Space Grotesk';}
+
+  .queue-stack{display:flex;gap:10px;}
+  .mini-avatar{
+    flex:1;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.07);
+    border-radius:10px;padding:10px 8px;text-align:center;
+  }
+  .mini-avatar .avatar{width:30px;height:30px;font-size:11px;margin:0 auto 6px;}
+  .mini-avatar p{margin:0;font-size:11px;font-weight:600;}
+  .mini-avatar span{font-size:10px;color:#9AA5B8;}
+
+  /* FEATURE PILLS strip */
+  .strip{
+    display:flex;gap:28px;flex-wrap:wrap;
+    padding:26px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    font-size:13.5px;color:var(--muted);font-weight:500;
+  }
+  .strip span{display:flex;align-items:center;gap:8px;}
+  .strip .ic{color:var(--teal-dark);}
+
+  section{padding:96px 0;}
+  .section-head{max-width:620px;margin:0 0 56px;}
+  .section-head .eyebrow{margin-bottom:16px;}
+  .section-head h2{font-size:36px;margin:0 0 16px;font-weight:700;}
+  .section-head p{color:var(--muted);font-size:16px;line-height:1.6;margin:0;}
+
+  /* FEATURES */
+  .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .feat-card{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:28px;transition:.2s ease;
+  }
+  .feat-card:hover{border-color:var(--teal);transform:translateY(-3px);box-shadow:0 16px 34px -18px rgba(16,27,51,0.25);}
+  .feat-num{
+    font-family:'JetBrains Mono';font-size:12px;color:var(--teal-dark);
+    margin-bottom:16px;letter-spacing:.05em;
+  }
+  .feat-card h3{font-size:18px;margin:0 0 10px;font-weight:600;}
+  .feat-card p{font-size:14.5px;color:var(--muted);line-height:1.6;margin:0 0 16px;}
+  .feat-tag{font-size:12px;font-weight:600;color:var(--teal-dark);display:inline-flex;align-items:center;gap:6px;}
+  .feat-card.wide{grid-column:span 3;display:flex;justify-content:space-between;align-items:center;background:var(--ink);color:#fff;}
+  .feat-card.wide p{color:#B7C0D1;}
+  .feat-card.wide .badges{display:flex;gap:24px;font-size:13px;color:#D7DCE6;}
+  .feat-card.wide .badges b{display:block;color:#fff;}
+
+  /* PROCESS */
+  .process-wrap{position:relative;}
+  .process-line{
+    position:absolute;left:23px;top:24px;bottom:24px;width:2px;
+    background:repeating-linear-gradient(180deg,var(--line) 0 8px, transparent 8px 16px);
+  }
+  .process-item{display:flex;gap:24px;padding:22px 0;position:relative;}
+  .process-num{
+    width:48px;height:48px;border-radius:12px;background:var(--card);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk';font-weight:700;
+    flex-shrink:0;z-index:1;color:var(--teal-dark);
+  }
+  .process-item.active .process-num{background:var(--ink);color:#fff;border-color:var(--ink);}
+  .process-item h4{margin:0 0 4px;font-size:17px;}
+  .process-item p{margin:0;color:var(--muted);font-size:14.5px;max-width:440px;}
+
+  /* STATS */
+  .stats-band{background:var(--ink);color:#fff;border-radius:24px;padding:52px 40px;margin-top:80px;}
+  .stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;text-align:center;}
+  .stats-grid b{display:block;font-family:'Space Grotesk';font-size:38px;color:var(--teal);}
+  .stats-grid span{font-size:13px;color:#AEB7C6;}
+
+  /* PRICING */
+  .price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:stretch;}
+  .price-card{
+    background:var(--card);border:1px solid var(--line);border-radius:18px;padding:32px;
+    display:flex;flex-direction:column;
+  }
+  .price-card.pop{border:2px solid var(--ink);position:relative;}
+  .pop-badge{
+    position:absolute;top:-13px;left:32px;background:var(--teal);color:#fff;
+    font-size:12px;font-weight:700;padding:4px 12px;border-radius:100px;
+  }
+  .price-card h3{font-size:19px;margin:0 0 6px;}
+  .price-card .sub{color:var(--muted);font-size:13.5px;margin:0 0 20px;}
+  .price-amt{font-family:'Space Grotesk';font-size:34px;font-weight:700;margin-bottom:24px;}
+  .price-amt span{font-size:14px;color:var(--muted);font-family:'Inter';font-weight:500;}
+  .price-list{list-style:none;margin:0 0 28px;padding:0;flex:1;}
+  .price-list li{
+    display:flex;gap:10px;font-size:14px;color:var(--ink);padding:9px 0;
+    border-top:1px solid var(--line);line-height:1.5;
+  }
+  .price-list li:first-child{border-top:none;}
+  .check{color:var(--teal-dark);font-weight:700;flex-shrink:0;}
+
+  /* TESTIMONIALS */
+  .test-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;}
+  .test-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;}
+  .stars{color:var(--amber);font-size:14px;margin-bottom:14px;letter-spacing:2px;}
+  .test-card p.quote{font-size:14.5px;line-height:1.6;margin:0 0 20px;color:var(--ink);}
+  .test-who{display:flex;gap:12px;align-items:center;}
+  .test-who .avatar{background:linear-gradient(135deg,#1C4E8C,var(--teal));width:38px;height:38px;font-size:12px;}
+  .test-who b{display:block;font-size:13.5px;}
+  .test-who span{font-size:12px;color:var(--muted);}
+
+  /* FAQ */
+  .faq-list{max-width:760px;margin:0 auto;}
+  .faq-item{border-bottom:1px solid var(--line);padding:22px 0;cursor:pointer;}
+  .faq-item summary{
+    display:flex;justify-content:space-between;align-items:center;
+    font-weight:600;font-size:15.5px;list-style:none;
+  }
+  .faq-item summary::-webkit-details-marker{display:none;}
+  .faq-item summary::after{content:"+";font-size:22px;color:var(--muted);font-weight:400;}
+  .faq-item[open] summary::after{content:"–";}
+  .faq-item p{color:var(--muted);font-size:14.5px;margin:14px 0 0;line-height:1.6;max-width:600px;}
+
+  /* CTA */
+  .cta-band{
+    background:var(--navy);border-radius:28px;padding:64px 48px;text-align:center;color:#fff;
+    position:relative;overflow:hidden;
+  }
+  .cta-band::before{
+    content:"";position:absolute;width:400px;height:400px;background:radial-gradient(circle,var(--teal) 0%,transparent 70%);
+    opacity:.25;top:-150px;right:-100px;
+  }
+  .cta-band h2{font-size:32px;margin:0 0 14px;position:relative;}
+  .cta-band p{color:#B7C0D1;margin:0 0 30px;position:relative;}
+  .cta-band .btn-primary{background:var(--teal);position:relative;}
+  .cta-band .btn-primary:hover{background:var(--teal-dark);}
+
+  footer{border-top:1px solid var(--line);padding:64px 0 32px;}
+  .foot-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:40px;margin-bottom:48px;}
+  .foot-grid h5{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 16px;}
+  .foot-grid ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px;}
+  .foot-grid a{font-size:14px;color:var(--ink);}
+  .foot-grid a:hover{color:var(--teal-dark);}
+  .foot-about p{color:var(--muted);font-size:14px;max-width:280px;line-height:1.6;margin:14px 0 20px;}
+  .foot-bottom{border-top:1px solid var(--line);padding-top:24px;display:flex;justify-content:space-between;font-size:13px;color:var(--muted);flex-wrap:wrap;gap:12px;}
+
+  @media(max-width:900px){
+    .hero-grid{grid-template-columns:1fr;}
+    .nav-links{display:none;}
+    .feat-grid{grid-template-columns:1fr;}
+    .feat-card.wide{grid-column:span 1;flex-direction:column;align-items:flex-start;gap:20px;}
+    .stats-grid{grid-template-columns:repeat(2,1fr);gap:28px;}
+    .price-grid{grid-template-columns:1fr;}
+    .test-grid{grid-template-columns:1fr;}
+    .foot-grid{grid-template-columns:1fr 1fr;}
+    .hero h1{font-size:38px;}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .scan-card::before, .badge-processing .dot{animation:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <div class="logo">
+        <div class="logo-mark">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#fff" stroke-width="1.6"/></svg>
+        </div>
+        V-AI RECRUITER
+      </div>
+      <div class="nav-links">
+        <a href="#home">Trang chủ</a>
+        <a href="#features">Tính năng</a>
+        <a href="#pricing">Bảng giá</a>
+        <a href="#faq">Tài nguyên</a>
+        <a href="#how-it-works">Giới thiệu</a>
+      </div>
+      <div class="nav-cta">
+        <a class="btn btn-ghost" href="#">Đăng nhập</a>
+        <a class="btn btn-primary" href="#">Dùng thử miễn phí</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<section class="hero" id="home" style="padding-bottom:0;">
+  <div class="wrap">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> AI hỗ trợ tuyển dụng thông minh</div>
+        <h1>Tuyển đúng người,<br><span class="accent">hiệu quả vượt trội</span></h1>
+        <p class="lead">V-AI Recruiter là nền tảng ứng dụng trí tuệ nhân tạo giúp doanh nghiệp tự động hóa quy trình tuyển dụng, tìm kiếm và đánh giá ứng viên nhanh chóng, chính xác.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#" style="padding:13px 24px;">Dùng thử miễn phí</a>
+          <a class="btn btn-outline" href="#how-it-works" style="padding:13px 24px;">Xem demo</a>
+        </div>
+        <div class="hero-stats">
+          <div><b>80%</b><span>Tiết kiệm thời gian</span></div>
+          <div><b>92%</b><span>Độ chính xác AI</span></div>
+          <div><b>24/7</b><span>Sàng lọc tự động</span></div>
+        </div>
+      </div>
+
+      <div class="scan-card">
+        <div class="scan-head">
+          <div>
+            <h4>AI Phân tích CV</h4>
+            <p>Senior Frontend Developer · 12 ứng viên</p>
+          </div>
+          <div class="badge-processing"><span class="dot"></span>Đang xử lý</div>
+        </div>
+        <div class="progress-row"><span>Tiến trình phân tích</span><span>73%</span></div>
+        <div class="progress-bar"><i></i></div>
+
+        <div class="candidate-main">
+          <div class="cand-top">
+            <div class="avatar">AN</div>
+            <div>
+              <h5>Nguyễn Văn An</h5>
+              <p>Frontend Developer · 3 năm KN · ĐH Bách Khoa HN</p>
+            </div>
+          </div>
+          <div class="tags">
+            <span class="tag">React</span><span class="tag">TypeScript</span>
+            <span class="tag">Node.js</span><span class="tag">GraphQL</span>
+          </div>
+          <div class="score-row">
+            <span>Điểm tổng thể — Ưu tiên cao</span>
+            <div class="score-ring"><i>92%</i></div>
+          </div>
+          <div class="subscores">
+            <div>Kỹ thuật<b>92%</b></div>
+            <div>Kinh nghiệm<b>78%</b></div>
+            <div>Học vấn<b>85%</b></div>
+          </div>
+        </div>
+
+        <div class="queue-stack">
+          <div class="mini-avatar"><div class="avatar">PD</div><p>Phạm T. Dung</p><span>Marketing Mgr</span></div>
+          <div class="mini-avatar"><div class="avatar">NB</div><p>Nguyễn Bảo</p><span>Sales Lead</span></div>
+          <div class="mini-avatar"><div class="avatar">VT</div><p>Võ Thành</p><span>Data Analyst</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="strip">
+      <span class="ic">✓</span><span>Bảo mật dữ liệu tuyệt đối</span>
+      <span class="ic">✓</span><span>Giao diện dễ sử dụng</span>
+      <span class="ic">✓</span><span>Hỗ trợ 24/7</span>
+    </div>
+  </div>
+</section>
+
+<section id="features">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow"><span class="dot"></span>Tính năng nổi bật</div>
+      <h2>Tuyển dụng thông minh, hiệu quả vượt trội</h2>
+      <p>V-AI Recruiter cung cấp đầy đủ công cụ giúp bạn tối ưu quy trình tuyển dụng và tìm được ứng viên phù hợp nhanh hơn.</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-num">01 / TẠO TIN</div>
+        <h3>Tạo tin tuyển dụng AI</h3>
+        <p>Tạo công việc chuyên nghiệp chỉ trong vài giây. AI hỗ trợ tự động phân tích và tối ưu nội dung tin đăng.</p>
+        <span class="feat-tag">Tiết kiệm 80% thời gian →</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-num">02 / PHÂN TÍCH</div>
+        <h3>Phân tích CV thông minh</h3>
+        <p>AI tự động đọc, phân tích và trích xuất thông tin quan trọng từ CV ứng viên với độ chính xác cao.</p>
+        <span class="feat-tag">Độ chính xác cao →</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-num">03 / CHẤM ĐIỂM</div>
+        <h3>Chấm điểm &amp; đánh giá</h3>
+        <p>Đánh giá mức độ phù hợp của ứng viên với vị trí tuyển dụng dựa trên tiêu chí và dữ liệu thực tế.</p>
+        <span class="feat-tag">Đánh giá khách quan →</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-num">04 / PHỎNG VẤN</div>
+        <h3>Tạo câu hỏi phỏng vấn AI</h3>
+        <p>Tự động tạo câu hỏi phỏng vấn phù hợp với từng vị trí và cấp độ, giúp đánh giá ứng viên toàn diện.</p>
+        <span class="feat-tag">Phỏng vấn hiệu quả hơn →</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-num">05 / QUẢN LÝ</div>
+        <h3>Quản lý ứng viên</h3>
+        <p>Theo dõi toàn bộ quá trình tuyển dụng một cách khoa học, từ ứng tuyển đến khi trở thành nhân viên.</p>
+        <span class="feat-tag">Quản lý tập trung →</span>
+      </div>
+      <div class="feat-card wide">
+        <div>
+          <h3 style="margin-bottom:8px;">Bảo mật dữ liệu tuyệt đối</h3>
+          <p style="max-width:400px;">Mã hoá đầu-cuối, tuân thủ quy định bảo vệ dữ liệu ứng viên tại Việt Nam.</p>
+        </div>
+        <div class="badges">
+          <div><b>256-bit</b>Mã hoá dữ liệu</div>
+          <div><b>24/7</b>Giám sát hệ thống</div>
+          <div><b>99.9%</b>Uptime cam kết</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" style="background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow"><span class="dot"></span>Quy trình hoạt động</div>
+      <h2>AI đồng hành từng bước tuyển dụng</h2>
+      <p>Từ lúc đăng tin đến khi tìm được ứng viên phù hợp, AI tự động hóa từng bước trong quy trình.</p>
+    </div>
+    <div class="process-wrap">
+      <div class="process-line"></div>
+      <div class="process-item active">
+        <div class="process-num">01</div>
+        <div><h4>Tạo tin tuyển dụng AI</h4><p>Mô tả ngắn gọn vị trí cần tuyển, AI soạn tin đăng chuyên nghiệp trong vài giây.</p></div>
+      </div>
+      <div class="process-item">
+        <div class="process-num">02</div>
+        <div><h4>Upload hồ sơ CV</h4><p>Ứng viên nộp CV hoặc HR tải hàng loạt hồ sơ có sẵn lên hệ thống.</p></div>
+      </div>
+      <div class="process-item">
+        <div class="process-num">03</div>
+        <div><h4>AI sàng lọc &amp; chấm điểm</h4><p>Hệ thống đọc, trích xuất và xếp hạng ứng viên theo mức độ phù hợp.</p></div>
+      </div>
+      <div class="process-item">
+        <div class="process-num">04</div>
+        <div><h4>Tạo câu hỏi &amp; phỏng vấn</h4><p>AI đề xuất bộ câu hỏi phỏng vấn riêng cho từng ứng viên và vị trí.</p></div>
+      </div>
+      <div class="process-item">
+        <div class="process-num">05</div>
+        <div><h4>Tuyển dụng thành công</h4><p>Ra quyết định nhanh hơn với đầy đủ dữ liệu và nhận xét từ AI.</p></div>
+      </div>
+    </div>
+
+    <div class="stats-band">
+      <div class="stats-grid">
+        <div><b>1.200+</b><span>Doanh nghiệp tin dùng</span></div>
+        <div><b>85.000+</b><span>Ứng viên trong hệ thống</span></div>
+        <div><b>340.000+</b><span>Hồ sơ đã được xử lý</span></div>
+        <div><b>80%</b><span>Tiết kiệm thời gian tuyển dụng</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow"><span class="dot"></span>Bảng giá</div>
+      <h2>Linh hoạt gói dịch vụ phù hợp với mọi quy mô</h2>
+      <p>Chọn gói phù hợp với quy mô doanh nghiệp của bạn, nâng cấp bất cứ lúc nào.</p>
+    </div>
+    <div class="price-grid">
+      <div class="price-card">
+        <h3>Cơ bản</h3>
+        <p class="sub">Phù hợp cho doanh nghiệp nhỏ</p>
+        <div class="price-amt">0đ<span> / tháng</span></div>
+        <ul class="price-list">
+          <li><span class="check">✓</span>Đăng tin tuyển dụng không giới hạn</li>
+          <li><span class="check">✓</span>100 credit AI/tháng (phân tích &amp; đánh giá CV, tạo câu hỏi phỏng vấn, phân tích JD)</li>
+          <li><span class="check">✓</span>Quản lý ứng viên cơ bản</li>
+          <li><span class="check">✓</span>Hỗ trợ email</li>
+        </ul>
+        <a class="btn btn-outline" href="#">Dùng thử miễn phí</a>
+      </div>
+      <div class="price-card pop">
+        <span class="pop-badge">Phổ biến</span>
+        <h3>Chuyên nghiệp</h3>
+        <p class="sub">Phù hợp cho doanh nghiệp vừa</p>
+        <div class="price-amt">199.000đ<span> / tháng</span></div>
+        <ul class="price-list">
+          <li><span class="check">✓</span>Đăng tin tuyển dụng không giới hạn</li>
+          <li><span class="check">✓</span>2.000 credit AI/tháng dùng chung cho phân tích CV, đánh giá CV, tạo câu hỏi phỏng vấn, phân tích JD</li>
+          <li><span class="check">✓</span>Đánh giá CV tốn 2 credit/lượt, các tác vụ còn lại 1 credit/lượt</li>
+          <li><span class="check">✓</span>Hỗ trợ ưu tiên</li>
+        </ul>
+        <a class="btn btn-primary" href="#">Bắt đầu ngay</a>
+      </div>
+      <div class="price-card">
+        <h3>Max</h3>
+        <p class="sub">Dành cho agency và doanh nghiệp lớn</p>
+        <div class="price-amt">499.000đ<span> / tháng</span></div>
+        <ul class="price-list">
+          <li><span class="check">✓</span>Đăng tin tuyển dụng không giới hạn</li>
+          <li><span class="check">✓</span>5.500 credit AI/tháng dùng chung cho phân tích CV, đánh giá CV, tạo câu hỏi phỏng vấn, phân tích JD</li>
+          <li><span class="check">✓</span>Đánh giá CV tốn 2 credit/lượt, các tác vụ còn lại 1 credit/lượt</li>
+          <li><span class="check">✓</span>Hỗ trợ ưu tiên 24/7</li>
+        </ul>
+        <a class="btn btn-outline" href="#">Nâng gói Max</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="background:var(--card);border-top:1px solid var(--line);border-bottom:1px solid var(--line);">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="eyebrow"><span class="dot"></span>Đánh giá</div>
+      <h2>Khách hàng nói gì về chúng tôi</h2>
+    </div>
+    <div class="test-grid">
+      <div class="test-card">
+        <div class="stars">★★★★★</div>
+        <p class="quote">"V-AI Recruiter giúp chúng tôi tiết kiệm hơn 80% thời gian sàng lọc hồ sơ. AI rất chính xác!"</p>
+        <div class="test-who"><div class="avatar">NH</div><div><b>Nguyễn Thị Hương</b><span>HR Manager - FPT Software</span></div></div>
+      </div>
+      <div class="test-card">
+        <div class="stars">★★★★★</div>
+        <p class="quote">"Giao diện dễ dùng, tính năng mạnh mẽ và tiết kiệm chi phí. Rất đáng để đầu tư!"</p>
+        <div class="test-who"><div class="avatar">TM</div><div><b>Trần Văn Minh</b><span>CEO - Miss JSC</span></div></div>
+      </div>
+      <div class="test-card">
+        <div class="stars">★★★★★</div>
+        <p class="quote">"Tự động hóa lịch phỏng vấn và báo cáo rất hữu ích cho đội ngũ HR của chúng tôi."</p>
+        <div class="test-who"><div class="avatar">PH</div><div><b>Phạm Quang Hiệp</b><span>HR Director - Viettel Telecom</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="section-head" style="margin:0 auto 48px;text-align:center;">
+      <div class="eyebrow" style="margin:0 auto 16px;">Câu hỏi thường gặp</div>
+      <h2>Bạn cần biết thêm điều gì?</h2>
+    </div>
+    <div class="faq-list">
+      <details class="faq-item" open>
+        <summary>V-AI Recruiter có miễn phí không?</summary>
+        <p>Có, gói Cơ bản miễn phí vĩnh viễn với 100 credit AI mỗi tháng, phù hợp cho doanh nghiệp nhỏ mới bắt đầu.</p>
+      </details>
+      <details class="faq-item">
+        <summary>AI sàng lọc hồ sơ dựa trên tiêu chí nào?</summary>
+        <p>AI đánh giá dựa trên kỹ năng kỹ thuật, kinh nghiệm làm việc, học vấn và mức độ phù hợp với mô tả công việc.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Dữ liệu ứng viên có được bảo mật không?</summary>
+        <p>Toàn bộ dữ liệu được mã hoá và tuân thủ các quy định bảo vệ dữ liệu cá nhân hiện hành.</p>
+      </details>
+      <details class="faq-item">
+        <summary>Tôi có thể nâng cấp hoặc hủy gói dịch vụ không?</summary>
+        <p>Bạn có thể nâng cấp, hạ cấp hoặc hủy gói dịch vụ bất cứ lúc nào ngay trong trang quản trị tài khoản.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta-band">
+      <h2>Sẵn sàng nâng cấp quy trình tuyển dụng?</h2>
+      <p>Dùng thử V-AI Recruiter miễn phí 14 ngày, không cần thẻ tín dụng.</p>
+      <a class="btn btn-primary" href="#" style="padding:14px 28px;">Dùng thử miễn phí ngay</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-about">
+        <div class="logo"><div class="logo-mark"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#fff" stroke-width="1.6"/></svg></div>V-AIRECRUITER</div>
+        <p>Nền tảng AI hỗ trợ tuyển dụng thông minh, giúp doanh nghiệp tìm đúng người, đúng việc nhanh chóng và hiệu quả.</p>
+      </div>
+      <div><h5>Sản phẩm</h5><ul><li><a href="#features">Tính năng</a></li><li><a href="#pricing">Bảng giá</a></li><li><a href="#">API</a></li><li><a href="#">Changelog</a></li></ul></div>
+      <div><h5>Tài nguyên</h5><ul><li><a href="#">Blog</a></li><li><a href="#">Hướng dẫn</a></li><li><a href="#">Tài liệu</a></li><li><a href="#">Case Study</a></li></ul></div>
+      <div><h5>Công ty</h5><ul><li><a href="#">Giới thiệu</a></li><li><a href="#">Tuyển dụng</a></li><li><a href="#">Liên hệ</a></li><li><a href="#">Chính sách bảo mật</a></li></ul></div>
+    </div>
+    <div class="foot-bottom">
+      <span>Email: contact@vairecruiter.ai · Hotline: 1900 1234 · Tầng 5, 123 Nguyễn Trãi, Thanh Xuân, Hà Nội</span>
+      <span>© 2024 V-AI Recruiter. All rights reserved.</span>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

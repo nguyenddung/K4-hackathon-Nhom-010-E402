@@ -7,8 +7,7 @@ import uuid
 import numpy as np
 import streamlit as st
 
-from ai_service import candidate_assessment, cosine_sim, embed_text, get_client, load_assessment
-from config import DB_PATH
+from ai_service import candidate_assessment, cosine_sim, embed_text, load_assessment
 from database import get_conn, init_db, log_audit
 from styles import apply_theme
 
@@ -30,23 +29,22 @@ def render_assessment(assessment: dict):
 def render_header():
     st.markdown(
         """
+        <div class="workspace-header">
+            <div class="brand-lockup">
+                <div class="logo-mark"><span>VA</span></div>
+                <div>
+                    <p class="brand-name">V-AI RECRUITER</p>
+                    <p class="brand-context">Talent screening workspace</p>
+                </div>
+            </div>
+            <div class="system-chip"><span class="system-dot"></span>Hệ thống sẵn sàng</div>
+        </div>
         <div class="brand-kicker">AI recruitment workspace</div>
-        <h1 class="brand-title">TalentScreen AI</h1>
+        <h1 class="brand-title">Tuyển đúng người,<br>hiệu quả vượt trội</h1>
         <p class="brand-copy">Tạo job, sàng lọc hồ sơ và lưu quyết định tuyển dụng trong một không gian làm việc tập trung.</p>
         """,
         unsafe_allow_html=True,
     )
-    with st.sidebar:
-        st.header("TalentScreen AI")
-        st.caption("Recruitment command center")
-        st.divider()
-        st.subheader("Trạng thái hệ thống")
-        if get_client() is None:
-            st.warning("Chưa có API key trong file .env → đang chạy ở MOCK mode (embedding giả lập).")
-        else:
-            st.success("Đã nạp OpenAI API key từ file .env.")
-        st.divider()
-        st.caption(f"DB file: `{DB_PATH}`")
 
 
 def render_jobs_tab():
@@ -211,7 +209,7 @@ def render_audit_tab():
 
 
 def main():
-    st.set_page_config(page_title="TalentScreen AI — Hackathon Mode", layout="wide")
+    st.set_page_config(page_title="V-AI Recruiter", layout="wide", initial_sidebar_state="collapsed")
     apply_theme()
     init_db()
     render_header()
