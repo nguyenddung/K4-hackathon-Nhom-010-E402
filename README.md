@@ -1,73 +1,78 @@
-# TalentScreen AI
+# V-AI Recruiter
 
-Ứng dụng Streamlit hỗ trợ đội tuyển dụng tạo vị trí tuyển dụng, sàng lọc CV theo mô tả công việc (JD), lưu quyết định của HR và theo dõi lịch sử kiểm toán. Dự án chạy hoàn toàn cục bộ với SQLite; khi cấu hình OpenAI API key, ứng dụng dùng embedding và mô hình chat để hỗ trợ đối chiếu hồ sơ.
+V-AI Recruiter là hệ thống tuyển dụng thông minh chạy cục bộ bằng Python, FastAPI và React/Vite. Ứng dụng hỗ trợ:
 
-## Chức năng
+- Tạo job tuyển dụng
+- Sàng lọc CV bằng AI/embedding
+- Lưu quyết định HR và ghi audit log
+- Xem thống kê dashboard cho tuyển dụng
 
-1. **Tạo job**: nhập tên vị trí và JD; hệ thống lưu embedding của JD.
-2. **Sàng lọc CV**: đối chiếu CV với JD bằng cosine similarity, sau đó tạo tóm tắt, điểm phù hợp, các nội dung cần xác minh và câu hỏi phỏng vấn.
-3. **Quyết định tuyển dụng**: HR chọn Pass, Hold hoặc Reject và lưu ghi chú; quyết định mới nhất có thể được cập nhật.
-4. **Phân tích và kiểm toán**: xem thống kê điểm số, phân bố quyết định và lịch sử thao tác.
+## Công nghệ sử dụng
 
-## Công nghệ
+- Backend: Python, FastAPI, SQLite
+- AI: OpenAI embeddings/chat hoặc chế độ mock khi chưa có API key
+- Frontend: React + Vite
 
-- Python, Streamlit và NumPy
-- SQLite cho dữ liệu local
-- OpenAI `text-embedding-3-small` để tạo embedding
-- OpenAI `gpt-4o-mini` để phân tích CV
+## Cài đặt
 
-## Cài đặt và chạy
-
-Yêu cầu: Python 3.10 trở lên và `pip`.
+### 1. Backend
 
 ```powershell
-git clone https://github.com/nguyenddung/TalentScreen_AI_Mini_Hackathon-.git
-cd TalentScreen_AI_Mini_Hackathon-
+cd d:\AI Thuc Chien\minihackathon
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env
 ```
 
-Mở `.env` và đặt khóa OpenAI của bạn:
+Tạo file `.env` nếu cần dùng OpenAI:
 
 ```env
 OPENAI_API_KEY=sk-...
 ```
 
-Khởi động ứng dụng:
+### 2. Frontend
 
 ```powershell
-streamlit run app.py
+cd d:\AI Thuc Chien\minihackathon\vai-recruiter-web
+npm install
 ```
 
-Sau đó mở `http://localhost:8501` trong trình duyệt.
+## Chạy ứng dụng
 
-## Chế độ MOCK
-
-Ứng dụng vẫn chạy khi chưa có `OPENAI_API_KEY`. Ở chế độ này, hệ thống dùng embedding mô phỏng và hiển thị nhận xét mẫu để phục vụ demo. Điểm số và nhận xét trong MOCK mode không được dùng để đánh giá ứng viên thực tế.
-
-## Dữ liệu local
-
-Khi chạy lần đầu, ứng dụng tạo `talentscreen_local.db` ở thư mục gốc. File này lưu job, CV đã nhập, điểm số, quyết định và audit log; file được bỏ qua bởi Git.
-
-Để xóa toàn bộ dữ liệu demo, dừng ứng dụng và xóa file database:
+### Backend API
 
 ```powershell
-Remove-Item talentscreen_local.db
+cd d:\AI Thuc Chien\minihackathon
+.\.venv\Scripts\python.exe -m uvicorn api:app --host 127.0.0.1 --port 8000
 ```
 
-## Sử dụng AI có trách nhiệm
+### Frontend
 
-TalentScreen AI là công cụ hỗ trợ sàng lọc, không phải hệ thống ra quyết định tự động. Đội tuyển dụng cần xem xét thủ công mọi kết quả, kiểm chứng các thiếu sót được nêu và không sử dụng thông tin nhạy cảm như tuổi, giới tính, dân tộc, tôn giáo, tình trạng hôn nhân hoặc sức khỏe để đưa ra quyết định.
+```powershell
+cd d:\AI Thuc Chien\minihackathon\vai-recruiter-web
+npm run dev -- --host 127.0.0.1 --port 5173
+```
 
-## Cấu trúc dự án
+Mở:
+- Frontend: http://127.0.0.1:5173
+- API: http://127.0.0.1:8000/docs
+
+## Tài khoản demo
+
+- `demo@vairecruiter.local` / `Demo@123`
+- `hr@vairecruiter.local` / `HR@123456`
+
+## Cấu trúc thư mục chính
 
 ```text
-app.py          # Điểm khởi động Streamlit
-ui.py           # Các màn hình và luồng tương tác
-ai_service.py   # OpenAI, embedding và phân tích CV
-database.py     # SQLite schema và audit log
-config.py       # Cấu hình ứng dụng
-styles.py       # Giao diện Streamlit
+api.py               # FastAPI backend
+ai_service.py        # Embedding + phân tích CV
+database.py          # SQLite schema và audit log
+ui.py                # Streamlit workflow cũ
+vai-recruiter-web/   # React/Vite frontend
 ```
+
+## Lưu ý
+
+- Nếu chưa cấu hình OpenAI API key, ứng dụng vẫn chạy ở chế độ mock để demo.
+- Dữ liệu lưu trong file `talentscreen_local.db` ở thư mục gốc.
