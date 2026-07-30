@@ -1,15 +1,23 @@
-# V-AI Recruiter
+# TalentScreen AI
 
-V-AI Recruiter là hệ thống tuyển dụng thông minh chạy cục bộ bằng Python, FastAPI và React/Vite. Ứng dụng hỗ trợ:
+TalentScreen AI là trợ lý sàng lọc ứng viên Backend Developer theo mô hình human-in-the-loop. AI chỉ đưa ra đề xuất có bằng chứng; HR luôn là người quyết định cuối cùng.
 
-- Tạo job tuyển dụng
-- Sàng lọc CV bằng AI/embedding
-- Lưu quyết định HR và ghi audit log
-- Xem thống kê dashboard cho tuyển dụng
+## Luồng MVP
+
+1. Đăng nhập hoặc đăng ký tài khoản HR Manager/Recruiter.
+2. Truy cập pipeline theo phòng ban và từng Job đang tuyển.
+3. Xem nhanh ứng viên theo match score, confidence và trạng thái HR.
+4. Tạo Job và nhập JD làm nguồn đánh giá chuẩn.
+5. Upload CV PDF/DOCX hoặc chọn ứng viên có sẵn.
+6. Mở hồ sơ chi tiết để xem breakdown, evidence, gap và câu hỏi phỏng vấn.
+7. HR đề xuất/chưa đề xuất, có thể override điểm và ghi lý do.
+8. Theo dõi toàn bộ thay đổi trong audit log.
+
+Frontend đã có dữ liệu Backend Developer mẫu để demo ngay. Quyết định và audit event mới được lưu trong trình duyệt; FastAPI cung cấp API thật cho đăng nhập, CV upload, AI assessment, quyết định và audit.
 
 ## Công nghệ sử dụng
 
-- Backend: Python, FastAPI, SQLite
+- Backend: Python, FastAPI, SQLite (có thể nâng cấp PostgreSQL/pgvector)
 - AI: OpenAI embeddings/chat hoặc chế độ mock khi chưa có API key
 - Frontend: React + Vite
 
@@ -57,7 +65,7 @@ Mở:
 - Frontend: http://127.0.0.1:5173
 - API: http://127.0.0.1:8000/docs
 
-## Tài khoản demo
+## Tài khoản API demo
 
 - `demo@vairecruiter.local` / `Demo@123`
 - `hr@vairecruiter.local` / `HR@123456`
@@ -74,5 +82,6 @@ vai-recruiter-web/   # React/Vite frontend
 
 ## Lưu ý
 
-- Nếu chưa cấu hình OpenAI API key, ứng dụng vẫn chạy ở chế độ mock để demo.
+- Frontend dùng đăng nhập/đăng ký qua FastAPI; có sẵn tài khoản demo ở trên.
+- Nếu chưa cấu hình OpenAI API key, backend vẫn chạy ở chế độ AI fallback để demo.
 - Dữ liệu lưu trong file `talentscreen_local.db` ở thư mục gốc.
