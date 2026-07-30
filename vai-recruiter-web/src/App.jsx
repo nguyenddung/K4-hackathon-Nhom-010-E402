@@ -63,12 +63,31 @@ function App() {
   function login(nextSession) { localStorage.setItem('vai-session', JSON.stringify(nextSession)); setSession(nextSession) }
   function logout() { localStorage.removeItem('vai-session'); setSession(null); setData({ jobs: [], candidates: [], dashboard: null, analytics: null, audit: [] }) }
   async function createJob(event) {
-    event.preventDefault(); const form = new FormData(event.currentTarget)
-    try { await request('/jobs', { token: session.access_token, method: 'POST', body: JSON.stringify({ title: form.get('title'), description: form.get('description') }) }); event.currentTarget.reset(); setNotice('Đã tạo job mới.'); await refresh() } catch (actionError) { setError(actionError.message) }
+    event.preventDefault()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    try {
+      await request('/jobs', { token: session.access_token, method: 'POST', body: JSON.stringify({ title: formData.get('title'), description: formData.get('description') }) })
+      form.reset()
+      setNotice('Đã tạo job mới.')
+      await refresh()
+    } catch (actionError) {
+      setError(actionError.message)
+    }
   }
   async function screenCandidate(event) {
-    event.preventDefault(); const form = new FormData(event.currentTarget)
-    try { const candidate = await request('/candidates', { token: session.access_token, method: 'POST', body: JSON.stringify({ job_id: form.get('job_id'), name: form.get('name'), cv_text: form.get('cv_text') }) }); event.currentTarget.reset(); setSelectedCandidate(candidate); setNotice('Đã chấm CV và lưu kết quả.'); await refresh() } catch (actionError) { setError(actionError.message) }
+    event.preventDefault()
+    const form = event.currentTarget
+    const formData = new FormData(form)
+    try {
+      const candidate = await request('/candidates', { token: session.access_token, method: 'POST', body: JSON.stringify({ job_id: formData.get('job_id'), name: formData.get('name'), cv_text: formData.get('cv_text') }) })
+      form.reset()
+      setSelectedCandidate(candidate)
+      setNotice('Đã chấm CV và lưu kết quả.')
+      await refresh()
+    } catch (actionError) {
+      setError(actionError.message)
+    }
   }
   async function saveDecision(event) {
     event.preventDefault(); const form = new FormData(event.currentTarget)
