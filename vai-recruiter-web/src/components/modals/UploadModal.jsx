@@ -3,7 +3,7 @@ import Icon from '../Icon'
 export default function UploadModal({ onClose, onSubmit, uploading, uploadError, uploadJobId, jobList, dragActive, handleDrag, handleDrop, selectedFile, setSelectedFile }) {
   return (
     <div className="fixed inset-0 z-30 bg-[#132a246b] backdrop-blur-[2px] grid place-items-center p-[20px]">
-      <div className="relative w-[min(540px,100%)] rounded-[10px] bg-paper p-[28px] shadow-[0_24px_70px_#152d2440]">
+      <div className="relative w rounded-[10px] bg-paper p-[28px] shadow-[0_24px_70px_#152d2440]">
         <button className="absolute right-[16px] top-[12px] border-0 bg-transparent text-[#7a8480] text-[22px]" onClick={onClose}>×</button>
         <p className="text-xs uppercase tracking-widest text-slate-500 m-[0_0_8px]">DATA INGESTION</p>
         <h2 className="font-serif text-2xl font-semibold m-[0_0_8px]">Tải CV ứng viên</h2>
@@ -16,10 +16,10 @@ export default function UploadModal({ onClose, onSubmit, uploading, uploadError,
               </select>
             </label>
             <label className="grid gap-[6px] text-sm font-semibold text-[#4c5753]">Họ và tên
-              <input className="w-full border border-[#cfd4cf] rounded-[6px] bg-white p-[10px] text-ink outline-forest text-sm" name="name" required placeholder="Tên ứng viên"/>
+              <input className="w-full border border-[#cfd4cf] rounded-[6px] bg-white p-[10px] text-ink outline-forest text-sm" name="name" required placeholder="Tên ứng viên" />
             </label>
             <label className="grid gap-[6px] text-sm font-semibold text-[#4c5753]">File CV
-              <div 
+              <div
                 className={`min-h-[112px] border border-dashed rounded-[7px] flex flex-col items-center justify-center gap-[5px] cursor-pointer transition-[.2s] ${dragActive ? 'border-[2px] border-forest bg-[#e0efe6]' : 'border-[#9db4aa] bg-[#f3f7f3] hover:border-forest hover:bg-[#edf4ef]'} text-forest`}
                 onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
                 onClick={() => document.getElementById('cv-upload-input').click()}
