@@ -12,6 +12,62 @@ from retrieval import RetrievalResult
 from schemas import CVAnalysisCore, RubricCriterion
 
 
+def parse_json_object(raw: str) -> dict[str, Any]:
+    text = (raw or "").strip()
+    if not text:
+        return {}
+
+    def normalize(candidate: str) -> str:
+        candidate = candidate.strip()
+        if candidate.startswith("```"):
+            candidate = candidate.strip("`")
+            if candidate.lower().startswith("json"):
+                candidate = candidate[4:].strip()
+            candidate = candidate.strip()
+        return candidate
+
+    def try_parse(candidate: str) -> dict[str, Any] | None:
+        candidate = normalize(candidate)
+        if not candidate:
+            return None
+        if candidate.startswith("{") or candidate.startswith("["):
+            for variant in (candidate, candidate.replace(", ]", " ]").replace(", }", " }")):
+                try:
+                    parsed = json.loads(variant)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(parsed, dict):
+                    return parsed
+        return None
+
+    candidates: list[str] = []
+    for marker in ("```json", "```JSON", "```"):
+        if marker in text:
+            parts = text.split(marker)
+            for part in parts:
+                candidate = part.strip()
+                if candidate.startswith("{") or candidate.startswith("["):
+                    candidates.append(candidate)
+    candidates.append(text)
+
+    for candidate in candidates:
+        parsed = try_parse(candidate)
+        if parsed is not None:
+            return parsed
+
+    start_positions = [i for i in range(len(text)) if text[i] in "[{"]
+    for start in start_positions:
+        for end in range(len(text), start, -1):
+            parsed = try_parse(text[start:end])
+            if parsed is not None:
+                return parsed
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Unable to parse JSON from model response") from exc
+
+
 @lru_cache(maxsize=1)
 def _openai_client():
     api_key = os.getenv("OPENAI_API_KEY", "").strip()
@@ -63,7 +119,7 @@ def generate_structured_json(
             },
         )
         raw = response.choices[0].message.content or "{}"
-        result = json.loads(raw)
+        result = parse_json_object(raw)
     else:
         try:
             from google.genai import types
@@ -81,7 +137,7 @@ def generate_structured_json(
                 response_json_schema=schema,
             ),
         )
-        result = json.loads(response.text or "{}")
+        result = parse_json_object(response.text or "{}")
     if not isinstance(result, dict):
         raise ValueError(f"{active_provider_name()} returned a non-object JSON response")
     return result

@@ -518,8 +518,8 @@ function WorkspaceApp({ session, onLogout }) {
 
         <div className="results-grid">
           <section className="score-panel card">
-            <div className="card-title"><div><p className="eyebrow">MATCH SCORE</p><h2>Mức độ phù hợp</h2></div><span className={`ai-badge ${candidate.analysisMode === 'openai' ? 'openai' : 'fallback'}`}>{candidate.analysisMode === 'openai' ? `✦ ${candidate.aiProvider} · ${candidate.aiModel}` : '⚙ Local fallback'}</span></div>
-            {candidate.analysisMode !== 'openai' && <div className="fallback-alert"><b>Kết quả này chưa được tạo bởi OpenAI</b><span>{candidate.fallbackReason || 'Đây là assessment cũ hoặc OpenAI chưa khả dụng khi hồ sơ được phân tích.'}</span><button onClick={runScreening} disabled={isRunning}>{isRunning ? 'Đang gọi OpenAI...' : 'Phân tích lại bằng AI'}</button></div>}
+            <div className="card-title"><div><p className="eyebrow">MATCH SCORE</p><h2>Mức độ phù hợp</h2></div><span className={`ai-badge ${candidate.analysisMode === 'openai' || candidate.analysisMode === 'gemini' ? 'openai' : 'fallback'}`}>{candidate.analysisMode === 'openai' || candidate.analysisMode === 'gemini' ? `✦ ${candidate.aiProvider || (candidate.analysisMode === 'gemini' ? 'Google Gemini' : 'OpenAI')} · ${candidate.aiModel || 'unknown'}` : '⚙ Local fallback'}</span></div>
+            {candidate.analysisMode !== 'openai' && candidate.analysisMode !== 'gemini' && <div className="fallback-alert"><b>Kết quả này chưa được tạo bởi AI</b><span>{candidate.fallbackReason || 'Đây là assessment cũ hoặc mô hình AI chưa khả dụng khi hồ sơ được phân tích.'}</span><button onClick={runScreening} disabled={isRunning}>{isRunning ? 'Đang gọi AI...' : 'Phân tích lại bằng AI'}</button></div>}
             <div className="score-hero">
               <div className="score-ring" style={{ '--score': `${candidate.score * 3.6}deg` }}><div><strong>{candidate.score}</strong><span>/100</span></div></div>
               <div className="score-copy"><b>{candidate.score >= 80 ? 'Phù hợp cao' : candidate.score >= 65 ? 'Cần HR xem thêm' : 'Phù hợp thấp'}</b><p>{candidate.score >= 80 ? 'Ứng viên đáp ứng phần lớn yêu cầu quan trọng.' : 'Hãy xem bằng chứng và khoảng trống trước khi quyết định.'}</p><div className="confidence"><span>Độ tin cậy</span><strong>{candidate.confidence}%</strong><i><em style={{ width: `${candidate.confidence}%` }}/></i></div></div>
@@ -536,7 +536,7 @@ function WorkspaceApp({ session, onLogout }) {
             </div>
 
             {tab === 'overview' && <div className="tab-content">
-              <div className="analysis-heading"><span>✦</span><div><p className="eyebrow">{candidate.analysisMode === 'openai' ? `AI EXPLANATION · ${candidate.aiModel}` : 'RULE-BASED EXPLANATION'}</p><h2>Tại sao ứng viên được {candidate.score} điểm?</h2></div></div>
+              <div className="analysis-heading"><span>✦</span><div><p className="eyebrow">{candidate.analysisMode === 'openai' || candidate.analysisMode === 'gemini' ? `AI EXPLANATION · ${candidate.aiModel || (candidate.analysisMode === 'gemini' ? 'Google Gemini' : 'OpenAI')}` : 'RULE-BASED EXPLANATION'}</p><h2>Tại sao ứng viên được {candidate.score} điểm?</h2></div></div>
               <p className="summary">{candidate.summary}</p>
               <h3>Bằng chứng nổi bật</h3>
               <div className="evidence-compact">{candidate.evidence.slice(0, 4).map(item => <div key={item.skill}><span className={`status-icon ${item.status}`}>{item.status === 'found' ? '✓' : item.status === 'partial' ? '~' : '!'}</span><div><b>{item.skill}</b><p>{item.quote}</p><small>{item.source}</small></div></div>)}</div>
