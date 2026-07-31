@@ -244,7 +244,7 @@ def normalize_assessment(assessment: Any) -> dict[str, Any]:
     breakdown = assessment.get("score_breakdown") if isinstance(assessment.get("score_breakdown"), dict) else {}
     evidence = assessment.get("evidence") if isinstance(assessment.get("evidence"), list) else []
     return {
-        "analysis_mode": assessment.get("analysis_mode") if assessment.get("analysis_mode") in {"openai", "gemini"} else "fallback",
+        "analysis_mode": assessment.get("analysis_mode") if assessment.get("analysis_mode") in {"openai", "gemini", "groq"} else "fallback",
         "provider": str(assessment.get("provider", "unknown")),
         "model": str(assessment.get("model", "unknown")),
         "fallback_reason": str(assessment.get("fallback_reason", "")),
