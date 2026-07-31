@@ -265,6 +265,7 @@ def create_candidate(payload: CandidateRequest, user: Annotated[dict[str, str], 
         safe_jd = redact_for_ai(job["description"])
     except SecurityViolation as exc:
         raise api_error(422, str(exc))
+    logger.info("create_candidate debug: job_id=%s cv_chars=%d redacted_chars=%d", payload.job_id, len(payload.cv_text), len(safe_cv.text))
     embedding = embed_text(safe_cv.text)
     job_embedding = json.loads(job["embedding"])
     refresh_job_embedding = len(job_embedding) != len(embedding)
@@ -272,6 +273,7 @@ def create_candidate(payload: CandidateRequest, user: Annotated[dict[str, str], 
         job_embedding = embed_text(safe_jd.text)
     score = max(0.0, min(1.0, cosine_sim(job_embedding, embedding)))
     assessment = candidate_assessment(safe_jd.text, safe_cv.text, score)
+    logger.info("ai_assessment debug: job_id=%s analysis_mode=%s provider=%s model=%s evidence_count=%d", payload.job_id, assessment.get("analysis_mode", "unknown"), assessment.get("provider", "unknown"), assessment.get("model", "unknown"), len(assessment.get("evidence", [])))
     candidate = {"id": str(uuid.uuid4()), "job_id": payload.job_id, "name": payload.name, "email": payload.email, "score": score, "reasoning": json.dumps(assessment, ensure_ascii=False), "created_at": now(), "security_status": "protected", "redaction_count": safe_cv.redactions}
     with transaction() as write_conn:
         if refresh_job_embedding:
@@ -350,6 +352,7 @@ async def upload_candidate_cv(
     """Upload a PDF/DOCX, extract it in memory, then run the protected screening flow."""
     try:
         text = extract_cv_text(cv.filename or "", cv.content_type, await cv.read())
+        logger.info("upload debug: filename=%s content_type=%s extracted_chars=%d", cv.filename, cv.content_type, len(text))
         result = create_candidate(CandidateRequest(job_id=job_id, name=name, email=email, cv_text=text), user)
     except DocumentError as exc:
         raise api_error(422, str(exc))

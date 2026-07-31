@@ -153,8 +153,43 @@ async function readApiPayload(response) {
   }
 }
 
+function assessmentFromApi(result) {
+  let assessment = result.assessment
+  if (!assessment && result.reasoning) {
+    if (typeof result.reasoning === 'object') {
+      assessment = result.reasoning
+    } else {
+      try {
+        assessment = JSON.parse(result.reasoning)
+      } catch {
+        assessment = {}
+      }
+    }
+  }
+  if (!assessment || typeof assessment !== 'object' || Array.isArray(assessment)) assessment = {}
+
+  // Also accept the criterion-based response returned by the RAG analysis API.
+  if (!(assessment.evidence?.length) && assessment.criteria?.length) {
+    assessment = {
+      ...assessment,
+      evidence: assessment.criteria.map(criterion => {
+        const quotes = Array.isArray(criterion.evidence) ? criterion.evidence : []
+        return {
+          requirement: criterion.name || criterion.criterion_name || criterion.criterion_id || 'Tiêu chí đánh giá',
+          evidence: quotes.map(item => item.quote).filter(Boolean).join(' … ') || criterion.rationale || 'Không đủ bằng chứng để đánh giá.',
+          status: criterion.verdict === 'met' ? 'found' : criterion.verdict === 'partial' ? 'partial' : 'missing',
+          source: quotes.length
+            ? [...new Set(quotes.map(item => item.section).filter(Boolean))].join(', ')
+            : 'Không tìm thấy trong CV',
+        }
+      }),
+    }
+  }
+  return assessment
+}
+
 function candidateFromApi(result, localJobId = result.job_id, fileName = result.cv_filename) {
-  const assessment = result.assessment || {}
+  const assessment = assessmentFromApi(result)
   const parts = assessment.score_breakdown || {}
   const breakdown = [
     ['Kỹ năng', Number(parts.skills || 0), 40],
@@ -165,10 +200,10 @@ function candidateFromApi(result, localJobId = result.job_id, fileName = result.
   const breakdownTotal = breakdown.reduce((sum, item) => sum + item[1], 0)
   const score = breakdownTotal || Math.round(Number(result.score || 0) * 100)
   const evidence = (assessment.evidence || []).map(item => ({
-    skill: item.requirement,
-    status: item.status === 'found' ? 'found' : 'missing',
-    source: item.status === 'found' ? 'CV đã tải lên' : 'Không tìm thấy trong CV',
-    quote: item.evidence,
+    skill: item.requirement || item.criterion_name || item.criterion_id || 'Tiêu chí đánh giá',
+    status: item.status === 'found' ? 'found' : item.status === 'partial' ? 'partial' : 'missing',
+    source: item.source || (item.status === 'found' || item.status === 'partial' ? 'CV đã tải lên' : 'Không tìm thấy trong CV'),
+    quote: item.evidence || item.quote || item.rationale || 'Không đủ bằng chứng để đánh giá.',
   }))
   const gaps = (assessment.gaps || []).map((text, index) => ({
     title: evidence.filter(item => item.status === 'missing')[index]?.skill || `Khoảng trống ${index + 1}`,
