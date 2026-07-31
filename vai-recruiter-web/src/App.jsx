@@ -270,6 +270,8 @@ function WorkspaceApp({ session, onLogout }) {
   const [createJobOpen, setCreateJobOpen] = useState(false)
   const [creatingJob, setCreatingJob] = useState(false)
   const [createJobError, setCreateJobError] = useState('')
+  const [dragActive, setDragActive] = useState(false)
+  const [selectedFile, setSelectedFile] = useState(null)
 
   const selectCandidate = id => {
     setCandidateId(id)
@@ -282,11 +284,35 @@ function WorkspaceApp({ session, onLogout }) {
     setDecision(saved[id] || null)
   }
 
+  const handleDrag = e => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true)
+    } else if (e.type === 'dragleave') {
+      setDragActive(false)
+    }
+  }
+
+  const handleDrop = e => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0]
+      const extension = file.name.split('.').pop()?.toLowerCase()
+      if (!['pdf', 'docx'].includes(extension)) return setUploadError('Chỉ hỗ trợ PDF hoặc DOCX.')
+      if (file.size > 10 * 1024 * 1024) return setUploadError('CV phải nhỏ hơn 10 MB.')
+      setSelectedFile(file)
+      setUploadError('')
+    }
+  }
+
   const uploadCv = async event => {
     event.preventDefault()
     setUploadError('')
     const data = new FormData(event.currentTarget)
-    const file = data.get('cv')
+    const file = selectedFile || data.get('cv')
     if (!file?.name) return setUploadError('Vui lòng chọn CV.')
     const extension = file.name.split('.').pop()?.toLowerCase()
     if (!['pdf', 'docx'].includes(extension)) return setUploadError('Chỉ hỗ trợ PDF hoặc DOCX.')
@@ -323,6 +349,7 @@ function WorkspaceApp({ session, onLogout }) {
       setDecision(null)
       setTab('overview')
       setUploadOpen(false)
+      setSelectedFile(null)
       const eventItem = { id: Date.now(), time: 'Vừa xong', actor: 'TalentScreen AI', action: 'Upload & phân tích CV', detail: `${newCandidate.name} · ${newCandidate.score}/100 · ${file.name}` }
       const nextAudit = [eventItem, ...audit]
       setAudit(nextAudit)
@@ -505,9 +532,9 @@ function WorkspaceApp({ session, onLogout }) {
       </form>
     </div>}
 
-    {uploadOpen && <div className="modal-backdrop" onMouseDown={e => e.target === e.currentTarget && !uploading && setUploadOpen(false)}>
+    {uploadOpen && <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget && !uploading) { setUploadOpen(false); setSelectedFile(null); }}}>
       <form className="modal upload-modal" onSubmit={uploadCv}>
-        <button type="button" className="modal-close" disabled={uploading} onClick={() => setUploadOpen(false)}>×</button>
+        <button type="button" className="modal-close" disabled={uploading} onClick={() => { setUploadOpen(false); setSelectedFile(null); }}>×</button>
         <p className="eyebrow">CV SCREENING</p>
         <h2>Upload và phân tích CV</h2>
         <p>CV được ẩn danh trước khi gửi đến AI. Hệ thống chỉ dùng CV, JD và competency framework để đánh giá.</p>
@@ -515,11 +542,11 @@ function WorkspaceApp({ session, onLogout }) {
           <label>Họ và tên<input name="name" required minLength="2" placeholder="VD: Nguyễn Minh Anh"/></label>
           <label>Email<input name="email" type="email" placeholder="email@domain.com"/></label>
           <label className="full-field">Vị trí ứng tuyển<select name="jobId" defaultValue={uploadJobId}>{jobList.map(job => <option key={job.id} value={job.id}>{job.title}</option>)}</select></label>
-          <label className="file-drop full-field"><input name="cv" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" required/><span>↑</span><b>Chọn CV từ máy tính</b><small>PDF hoặc DOCX · tối đa 10 MB</small></label>
+          <label className={`file-drop full-field ${dragActive ? 'drag-active' : ''}`} onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}><input name="cv" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={e => { if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]) }} required={!selectedFile}/><span>↑</span><b>{selectedFile ? selectedFile.name : 'Chọn CV từ máy tính hoặc kéo thả vào đây'}</b><small>{selectedFile ? `${(selectedFile.size / 1024 / 1024).toFixed(2)} MB` : 'PDF hoặc DOCX · tối đa 10 MB'}</small></label>
         </div>
         {uploadError && <div className="upload-error">{uploadError}</div>}
         <div className="upload-security"><Icon name="shield"/><span>PII được mã hoá khi lưu trữ và loại bỏ trước khi AI phân tích.</span></div>
-        <div className="modal-actions"><button type="button" className="secondary" disabled={uploading} onClick={() => setUploadOpen(false)}>Huỷ</button><button className="primary" disabled={uploading}>{uploading ? <><span className="spinner"/>Đang đọc & phân tích...</> : <>✦ Phân tích CV</>}</button></div>
+        <div className="modal-actions"><button type="button" className="secondary" disabled={uploading} onClick={() => { setUploadOpen(false); setSelectedFile(null); }}>Huỷ</button><button className="primary" disabled={uploading}>{uploading ? <><span className="spinner"/>Đang đọc & phân tích...</> : <>✦ Phân tích CV</>}</button></div>
       </form>
     </div>}
 
