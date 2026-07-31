@@ -17,5 +17,11 @@ UPLOAD_DIR = BASE_DIR / os.getenv("UPLOAD_DIR", "uploads")
 MAX_CV_BYTES = 10 * 1024 * 1024
 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "text-embedding-3-small")
-CHAT_MODEL = os.getenv("CHAT_MODEL", "gpt-4o-mini")
-MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "450"))
+AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").strip().casefold()
+if AI_PROVIDER not in {"openai", "gemini"}:
+    raise RuntimeError("AI_PROVIDER must be either 'openai' or 'gemini'")
+
+# CHAT_MODEL remains supported for existing .env files.
+CHAT_MODEL = os.getenv("OPENAI_CHAT_MODEL", os.getenv("CHAT_MODEL", "gpt-4o-mini"))
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "2400"))

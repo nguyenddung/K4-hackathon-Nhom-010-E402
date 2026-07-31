@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const seedJobs = [
+const _seedJobs = [
   {
     id: 'backend-senior',
     title: 'Senior Backend Developer',
@@ -18,7 +18,7 @@ const seedJobs = [
   },
 ]
 
-const seedCandidates = [
+const _seedCandidates = [
   {
     id: 'an',
     jobId: 'backend-senior',
@@ -135,7 +135,7 @@ const seedCandidates = [
   },
 ]
 
-const initialAudit = [
+const _initialAudit = [
   { id: 1, time: '10:32 · Hôm nay', actor: 'TalentScreen AI', action: 'Hoàn tất phân tích', detail: 'Nguyễn Hoàng An · 82/100 · Confidence 87%' },
   { id: 2, time: '10:31 · Hôm nay', actor: 'Hệ thống', action: 'Ẩn danh dữ liệu CV', detail: 'Đã loại bỏ 4 trường PII trước khi gửi tới AI' },
   { id: 3, time: '09:14 · Hôm nay', actor: 'Mai Anh (HR)', action: 'Tải lên hồ sơ', detail: 'Nguyễn Hoàng An · Senior Backend Developer' },
@@ -143,7 +143,17 @@ const initialAudit = [
 
 const backendJd = `Tuyển Backend Developer. Yêu cầu: Python, FastAPI, REST API, PostgreSQL, Docker, Kubernetes, system design, tối ưu hiệu năng và vận hành production. Ứng viên cần mô tả rõ vai trò, thời gian sử dụng công nghệ, quy mô dự án và kết quả đo lường được.`
 
-function candidateFromApi(result, localJobId, fileName) {
+async function readApiPayload(response) {
+  const body = await response.text()
+  if (!body) return {}
+  try {
+    return JSON.parse(body)
+  } catch {
+    return { detail: response.ok ? 'API trả về dữ liệu không hợp lệ.' : body.startsWith('Internal Server Error') ? 'Backend gặp lỗi khi xử lý yêu cầu. Vui lòng thử lại hoặc kiểm tra terminal backend.' : body.slice(0, 240) }
+  }
+}
+
+function candidateFromApi(result, localJobId = result.job_id, fileName = result.cv_filename) {
   const assessment = result.assessment || {}
   const parts = assessment.score_breakdown || {}
   const breakdown = [
@@ -170,9 +180,9 @@ function candidateFromApi(result, localJobId, fileName) {
     jobId: localJobId,
     name: result.name,
     initials: result.name.split(/\s+/).map(part => part[0]).slice(-2).join('').toUpperCase(),
-    role: 'Ứng viên mới · Vừa phân tích',
-    file: fileName,
-    updated: 'vừa xong',
+    role: result.job_title || 'Ứng viên đã sàng lọc',
+    file: fileName || 'CV đã mã hoá',
+    updated: result.updated_at ? 'đã cập nhật' : 'đã phân tích',
     score,
     confidence: Number(assessment.confidence || 0),
     summary: assessment.summary || 'Không đủ bằng chứng để đánh giá.',
@@ -180,6 +190,14 @@ function candidateFromApi(result, localJobId, fileName) {
     evidence: evidence.length ? evidence : [{ skill: 'Thông tin CV', status: 'missing', source: 'CV đã tải lên', quote: 'Không đủ bằng chứng để đánh giá.' }],
     gaps: gaps.length ? gaps : [{ title: 'Thông tin cần xác minh', severity: 'Cần xác minh', text: 'Không đủ bằng chứng để đánh giá toàn bộ yêu cầu của JD.' }],
     questions: assessment.interview_questions?.length ? assessment.interview_questions : ['Bạn có thể mô tả dự án backend gần nhất, vai trò và các quyết định kỹ thuật của mình không?'],
+    analysisMode: assessment.analysis_mode || 'fallback',
+    aiProvider: assessment.provider || 'Không xác định',
+    aiModel: assessment.model || 'Không xác định',
+    fallbackReason: assessment.fallback_reason || '',
+    recommendation: assessment.recommendation || 'needs_review',
+    hrDecision: result.decision || null,
+    decisionNote: result.note || '',
+    overrideScore: result.override_score,
   }
 }
 
@@ -210,7 +228,7 @@ function AuthScreen({ onAuthenticated }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mode === 'login' ? { email: data.email, password: data.password } : { name: data.name, email: data.email, password: data.password, role: data.role }),
       })
-      const payload = await response.json()
+      const payload = await readApiPayload(response)
       if (!response.ok) throw new Error(payload.detail || 'Không thể xác thực tài khoản.')
       localStorage.setItem('talentscreen-session', JSON.stringify(payload))
       onAuthenticated(payload)
@@ -248,28 +266,73 @@ function App() {
 
 function WorkspaceApp({ session, onLogout }) {
   const [view, setView] = useState('pipeline')
-  const [jobList, setJobList] = useState(seedJobs)
-  const [jobId, setJobId] = useState(seedJobs[0].id)
-  const [candidateList, setCandidateList] = useState(seedCandidates)
+  const [jobList, setJobList] = useState([])
+  const [jobId, setJobId] = useState('')
+  const [candidateList, setCandidateList] = useState([])
   const available = useMemo(() => candidateList.filter(item => item.jobId === jobId), [candidateList, jobId])
-  const [candidateId, setCandidateId] = useState(seedCandidates[0].id)
+  const [candidateId, setCandidateId] = useState('')
   const candidate = available.find(item => item.id === candidateId) || available[0]
   const [tab, setTab] = useState('overview')
   const [isRunning, setIsRunning] = useState(false)
   const [fresh, setFresh] = useState(false)
-  const [decision, setDecision] = useState(() => (JSON.parse(localStorage.getItem('talentscreen-decisions') || '{}'))[seedCandidates[0].id] || null)
-  const [audit, setAudit] = useState(() => JSON.parse(localStorage.getItem('talentscreen-audit') || 'null') || initialAudit)
+  const [decision, setDecision] = useState(null)
+  const [audit, setAudit] = useState([])
   const [dialog, setDialog] = useState(null)
   const [override, setOverride] = useState(false)
-  const [overrideScore, setOverrideScore] = useState(candidate.score)
+  const [overrideScore, setOverrideScore] = useState(0)
   const [toast, setToast] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [uploadJobId, setUploadJobId] = useState(seedJobs[0].id)
+  const [uploadJobId, setUploadJobId] = useState('')
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState('')
   const [createJobOpen, setCreateJobOpen] = useState(false)
   const [creatingJob, setCreatingJob] = useState(false)
   const [createJobError, setCreateJobError] = useState('')
+  const [workspaceLoading, setWorkspaceLoading] = useState(true)
+  const [workspaceError, setWorkspaceError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    const loadWorkspace = async () => {
+      setWorkspaceLoading(true)
+      setWorkspaceError('')
+      try {
+        const headers = { Authorization: `Bearer ${session.access_token}` }
+        const [jobsResponse, candidatesResponse, auditResponse] = await Promise.all([
+          fetch('/api/jobs', { headers }),
+          fetch('/api/candidates?limit=100', { headers }),
+          fetch('/api/audit?limit=100', { headers }),
+        ])
+        if ([jobsResponse, candidatesResponse, auditResponse].some(response => response.status === 401)) {
+          onLogout()
+          return
+        }
+        if (!jobsResponse.ok || !candidatesResponse.ok || !auditResponse.ok) throw new Error('Không thể tải dữ liệu workspace.')
+        const [apiJobs, candidatePage, apiAudit] = await Promise.all([readApiPayload(jobsResponse), readApiPayload(candidatesResponse), readApiPayload(auditResponse)])
+        if (!active) return
+        const mappedJobs = apiJobs.map(job => ({ ...job, department: job.department || 'Engineering', code: job.code || `JOB-${job.id.slice(0, 6).toUpperCase()}` }))
+        const mappedCandidates = candidatePage.items.map(item => candidateFromApi(item))
+        setJobList(mappedJobs)
+        setCandidateList(mappedCandidates)
+        setAudit(apiAudit.map(item => ({ id: item.id, time: new Date(item.created_at).toLocaleString('vi-VN'), actor: item.actor_id === session.user.id ? session.user.name : 'Hệ thống', action: item.action, detail: item.detail })))
+        if (mappedCandidates.length) {
+          setJobId(mappedCandidates[0].jobId)
+          setCandidateId(mappedCandidates[0].id)
+          setOverrideScore(mappedCandidates[0].score)
+          setDecision(mappedCandidates[0].hrDecision ? { type: mappedCandidates[0].hrDecision === 'Pass' ? 'advance' : 'hold', note: mappedCandidates[0].decisionNote, score: mappedCandidates[0].overrideScore ?? mappedCandidates[0].score, overridden: mappedCandidates[0].overrideScore != null } : null)
+        } else if (mappedJobs.length) {
+          setJobId(mappedJobs[0].id)
+          setUploadJobId(mappedJobs[0].id)
+        }
+      } catch (error) {
+        if (active) setWorkspaceError(error.message)
+      } finally {
+        if (active) setWorkspaceLoading(false)
+      }
+    }
+    loadWorkspace()
+    return () => { active = false }
+  }, [session.access_token, session.user.id, session.user.name, onLogout])
 
   const selectCandidate = id => {
     setCandidateId(id)
@@ -278,8 +341,7 @@ function WorkspaceApp({ session, onLogout }) {
     setOverride(false)
     const next = candidateList.find(item => item.id === id)
     setOverrideScore(next?.score || 0)
-    const saved = JSON.parse(localStorage.getItem('talentscreen-decisions') || '{}')
-    setDecision(saved[id] || null)
+    setDecision(next?.hrDecision ? { type: next.hrDecision === 'Pass' ? 'advance' : 'hold', note: next.decisionNote, score: next.overrideScore ?? next.score, overridden: next.overrideScore != null } : null)
   }
 
   const uploadCv = async event => {
@@ -296,17 +358,17 @@ function WorkspaceApp({ session, onLogout }) {
       const headers = { Authorization: `Bearer ${session.access_token}` }
       const jobsResponse = await fetch('/api/jobs', { headers })
       if (!jobsResponse.ok) throw new Error('Không thể tải danh sách vị trí từ API.')
-      const apiJobs = await jobsResponse.json()
+      const apiJobs = await readApiPayload(jobsResponse)
       const localJob = jobList.find(item => item.id === data.get('jobId'))
-      let apiJob = localJob.apiId ? apiJobs.find(item => item.id === localJob.apiId) : apiJobs.find(item => item.title.toLowerCase() === localJob.title.toLowerCase())
+      let apiJob = apiJobs.find(item => item.id === localJob.id) || apiJobs.find(item => item.title.toLowerCase() === localJob.title.toLowerCase())
       if (!apiJob) {
         const createResponse = await fetch('/api/jobs', {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: localJob.title, description: localJob.description || backendJd }),
+          body: JSON.stringify({ title: localJob.title, description: localJob.description || backendJd, department: localJob.department, code: localJob.code }),
         })
         if (!createResponse.ok) throw new Error('Không thể tạo vị trí trên API.')
-        apiJob = await createResponse.json()
+        apiJob = await readApiPayload(createResponse)
       }
       const uploadData = new FormData()
       uploadData.append('job_id', apiJob.id)
@@ -314,7 +376,7 @@ function WorkspaceApp({ session, onLogout }) {
       uploadData.append('email', data.get('email'))
       uploadData.append('cv', file)
       const response = await fetch('/api/candidates/upload', { method: 'POST', headers, body: uploadData })
-      const payload = await response.json()
+      const payload = await readApiPayload(response)
       if (!response.ok) throw new Error(payload.detail || 'Không thể phân tích CV.')
       const newCandidate = candidateFromApi(payload, localJob.id, file.name)
       setCandidateList(items => [newCandidate, ...items])
@@ -326,7 +388,6 @@ function WorkspaceApp({ session, onLogout }) {
       const eventItem = { id: Date.now(), time: 'Vừa xong', actor: 'TalentScreen AI', action: 'Upload & phân tích CV', detail: `${newCandidate.name} · ${newCandidate.score}/100 · ${file.name}` }
       const nextAudit = [eventItem, ...audit]
       setAudit(nextAudit)
-      localStorage.setItem('talentscreen-audit', JSON.stringify(nextAudit))
       setToast(`Đã phân tích CV của ${newCandidate.name}.`)
     } catch (error) {
       setUploadError(`${error.message} Hãy kiểm tra backend đang chạy ở cổng 8000.`)
@@ -344,16 +405,15 @@ function WorkspaceApp({ session, onLogout }) {
       const response = await fetch('/api/jobs', {
         method: 'POST',
         headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: data.get('title'), description: data.get('description') }),
+        body: JSON.stringify({ title: data.get('title'), description: data.get('description'), department: data.get('department'), code: data.get('code') || null }),
       })
-      const payload = await response.json()
+      const payload = await readApiPayload(response)
       if (!response.ok) throw new Error(payload.detail || 'Không thể tạo Job.')
       const newJob = {
-        id: `local-${payload.id}`,
-        apiId: payload.id,
+        id: payload.id,
         title: payload.title,
-        code: data.get('code') || `ENG-${String(jobList.length + 40).padStart(3, '0')}`,
-        department: data.get('department'),
+        code: payload.code,
+        department: payload.department,
         description: payload.description,
         requirements: [],
       }
@@ -370,37 +430,54 @@ function WorkspaceApp({ session, onLogout }) {
     }
   }
 
-  const runScreening = () => {
+  const runScreening = async () => {
+    if (!candidate) return
     setIsRunning(true)
     setFresh(false)
-    window.setTimeout(() => {
+    try {
+      const response = await fetch(`/api/candidates/${candidate.id}/rescreen`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const payload = await readApiPayload(response)
+      if (!response.ok) throw new Error(payload.detail || 'Không thể phân tích lại CV.')
+      const updated = candidateFromApi(payload)
+      setCandidateList(items => items.map(item => item.id === updated.id ? updated : item))
+      setOverrideScore(updated.score)
       setIsRunning(false)
       setFresh(true)
-      const event = { id: Date.now(), time: 'Vừa xong', actor: 'TalentScreen AI', action: 'Phân tích lại hồ sơ', detail: `${candidate.name} · ${candidate.score}/100 · Grounded on CV + JD` }
-      const next = [event, ...audit]
-      setAudit(next)
-      localStorage.setItem('talentscreen-audit', JSON.stringify(next))
+      setAudit(items => [{ id: Date.now(), time: 'Vừa xong', actor: 'TalentScreen AI', action: 'Phân tích lại hồ sơ', detail: `${updated.name} · ${updated.score}/100 · Grounded on CV + JD` }, ...items])
       setToast('Phân tích hoàn tất — mọi kết luận đều có nguồn bằng chứng.')
-    }, 900)
+    } catch (error) {
+      setToast(error.message)
+    } finally {
+      setIsRunning(false)
+    }
   }
 
-  const saveDecision = event => {
+  const saveDecision = async event => {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
     const chosen = dialog
     const score = override ? Number(overrideScore) : candidate.score
-    const savedDecision = { type: chosen, note: data.get('note'), score, overridden: override, at: 'Vừa xong' }
-    const all = JSON.parse(localStorage.getItem('talentscreen-decisions') || '{}')
-    all[candidate.id] = savedDecision
-    localStorage.setItem('talentscreen-decisions', JSON.stringify(all))
-    setDecision(savedDecision)
-    const label = chosen === 'advance' ? 'Đề xuất vào vòng tiếp' : 'Chưa đề xuất'
-    const eventItem = { id: Date.now(), time: 'Vừa xong', actor: 'Mai Anh (HR)', action: label, detail: `${candidate.name}${override ? ` · Override ${candidate.score} → ${score}` : ' · Giữ nguyên điểm AI'}` }
-    const next = [eventItem, ...audit]
-    setAudit(next)
-    localStorage.setItem('talentscreen-audit', JSON.stringify(next))
-    setDialog(null)
-    setToast(`Đã lưu quyết định HR cho ${candidate.name}.`)
+    try {
+      const response = await fetch(`/api/candidates/${candidate.id}/decision`, {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decision: chosen === 'advance' ? 'Pass' : 'Hold', note: data.get('note'), override_score: override ? score : null }),
+      })
+      const payload = await readApiPayload(response)
+      if (!response.ok) throw new Error(payload.detail || 'Không thể lưu quyết định.')
+      const savedDecision = { type: chosen, note: payload.note, score, overridden: override, at: 'Vừa xong' }
+      setDecision(savedDecision)
+      setCandidateList(items => items.map(item => item.id === candidate.id ? { ...item, hrDecision: payload.decision, decisionNote: payload.note, overrideScore: payload.override_score } : item))
+      const label = chosen === 'advance' ? 'Đề xuất vào vòng tiếp' : 'Chưa đề xuất'
+      setAudit(items => [{ id: Date.now(), time: 'Vừa xong', actor: session.user.name, action: label, detail: `${candidate.name}${override ? ` · Override ${candidate.score} → ${score}` : ' · Giữ nguyên điểm AI'}` }, ...items])
+      setDialog(null)
+      setToast(`Đã lưu quyết định HR cho ${candidate.name} vào database.`)
+    } catch (error) {
+      setToast(error.message)
+    }
   }
 
   return <div className="app-shell">
@@ -409,7 +486,7 @@ function WorkspaceApp({ session, onLogout }) {
       <p className="workspace-label">WORKSPACE</p>
       <nav>
         <button className={view === 'pipeline' ? 'active' : ''} onClick={() => setView('pipeline')}><Icon name="pipeline"/>Phòng ban & Job</button>
-        <button className={view === 'screen' ? 'active' : ''} onClick={() => setView('screen')}><Icon name="screen"/>Sàng lọc ứng viên</button>
+        <button className={view === 'screen' ? 'active' : ''} onClick={() => setView(candidate ? 'screen' : 'pipeline')}><Icon name="screen"/>Chi tiết đánh giá</button>
         <button className={view === 'audit' ? 'active' : ''} onClick={() => setView('audit')}><Icon name="audit"/>Nhật ký đánh giá</button>
       </nav>
       <div className="sidebar-note"><Icon name="shield"/><div><b>Human-in-the-loop</b><p>AI chỉ đề xuất. Bạn luôn là người quyết định cuối cùng.</p></div></div>
@@ -424,9 +501,9 @@ function WorkspaceApp({ session, onLogout }) {
 
       {toast && <div className="toast">{toast}<button onClick={() => setToast('')}>×</button></div>}
 
-      {view === 'audit' ? <AuditView audit={audit}/> : view === 'pipeline' ? <PipelineView jobs={jobList} candidates={candidateList} onCreateJob={() => { setCreateJobError(''); setCreateJobOpen(true) }} onUpload={selectedJobId => { setUploadJobId(selectedJobId); setUploadError(''); setUploadOpen(true) }} onOpenCandidate={(item, selectedJob) => { setJobId(selectedJob.id); selectCandidate(item.id); setView('screen') }}/> : <div className="workspace">
+      {workspaceLoading ? <WorkspaceState title="Đang tải workspace..." text="TalentScreen đang đồng bộ Job, ứng viên và quyết định từ database."/> : workspaceError ? <WorkspaceState title="Không thể tải dữ liệu" text={workspaceError} action="Thử lại" onAction={() => window.location.reload()}/> : view === 'audit' ? <AuditView audit={audit}/> : view === 'pipeline' ? <PipelineView jobs={jobList} candidates={candidateList} onCreateJob={() => { setCreateJobError(''); setCreateJobOpen(true) }} onUpload={selectedJobId => { setUploadJobId(selectedJobId); setUploadError(''); setUploadOpen(true) }} onOpenCandidate={(item, selectedJob) => { setJobId(selectedJob.id); selectCandidate(item.id); setView('screen') }}/> : !candidate ? <WorkspaceState title="Chưa có ứng viên để đánh giá" text="Hãy tạo Job và upload CV đầu tiên. TalentScreen sẽ phân tích hồ sơ ngay sau khi tải lên." action="Về danh sách Job" onAction={() => setView('pipeline')}/> : <div className="workspace">
         <section className="page-heading">
-          <div><p className="eyebrow">AI SCREENING WORKSPACE</p><h1>Đánh giá ứng viên</h1><p>Đối chiếu CV với yêu cầu công việc — minh bạch, có bằng chứng và không suy diễn.</p></div>
+          <div><button className="back-link" onClick={() => setView('pipeline')}>← Quay lại danh sách</button><h1>{candidate.name}</h1><p>{jobList.find(job => job.id === candidate.jobId)?.title} · Đánh giá dựa trên CV và JD</p></div>
           <div className="heading-actions"><button className="create-job-button" onClick={() => { setCreateJobError(''); setCreateJobOpen(true) }}>＋ Tạo Job</button><button className="upload-button" onClick={() => { setUploadJobId(jobId); setUploadError(''); setUploadOpen(true) }}>↑ Upload CV</button><button className="run-button" onClick={runScreening} disabled={isRunning}><span className={isRunning ? 'spinner' : ''}>{isRunning ? '' : '✦'}</span>{isRunning ? 'Đang phân tích...' : 'Phân tích lại'}</button></div>
         </section>
 
@@ -441,10 +518,11 @@ function WorkspaceApp({ session, onLogout }) {
 
         <div className="results-grid">
           <section className="score-panel card">
-            <div className="card-title"><div><p className="eyebrow">MATCH SCORE</p><h2>Mức độ phù hợp</h2></div><span className="ai-badge">✦ AI đề xuất</span></div>
+            <div className="card-title"><div><p className="eyebrow">MATCH SCORE</p><h2>Mức độ phù hợp</h2></div><span className={`ai-badge ${candidate.analysisMode === 'openai' ? 'openai' : 'fallback'}`}>{candidate.analysisMode === 'openai' ? `✦ ${candidate.aiProvider} · ${candidate.aiModel}` : '⚙ Local fallback'}</span></div>
+            {candidate.analysisMode !== 'openai' && <div className="fallback-alert"><b>Kết quả này chưa được tạo bởi OpenAI</b><span>{candidate.fallbackReason || 'Đây là assessment cũ hoặc OpenAI chưa khả dụng khi hồ sơ được phân tích.'}</span><button onClick={runScreening} disabled={isRunning}>{isRunning ? 'Đang gọi OpenAI...' : 'Phân tích lại bằng AI'}</button></div>}
             <div className="score-hero">
               <div className="score-ring" style={{ '--score': `${candidate.score * 3.6}deg` }}><div><strong>{candidate.score}</strong><span>/100</span></div></div>
-              <div className="score-copy"><b>Phù hợp cao</b><p>Ứng viên đáp ứng phần lớn yêu cầu quan trọng của vị trí.</p><div className="confidence"><span>Độ tin cậy</span><strong>{candidate.confidence}%</strong><i><em style={{ width: `${candidate.confidence}%` }}/></i></div></div>
+              <div className="score-copy"><b>{candidate.score >= 80 ? 'Phù hợp cao' : candidate.score >= 65 ? 'Cần HR xem thêm' : 'Phù hợp thấp'}</b><p>{candidate.score >= 80 ? 'Ứng viên đáp ứng phần lớn yêu cầu quan trọng.' : 'Hãy xem bằng chứng và khoảng trống trước khi quyết định.'}</p><div className="confidence"><span>Độ tin cậy</span><strong>{candidate.confidence}%</strong><i><em style={{ width: `${candidate.confidence}%` }}/></i></div></div>
             </div>
             <div className="breakdown">{candidate.breakdown.map(([name, value, max]) => <div key={name}><span>{name}</span><i><em style={{ width: `${value / max * 100}%` }}/></i><b>{value}<small>/{max}</small></b></div>)}</div>
             <div className="grounded-note"><Icon name="shield"/><p><b>Chỉ dùng bằng chứng có trong hồ sơ</b><br/>Thông tin thiếu được đánh dấu để HR xác minh.</p></div>
@@ -458,7 +536,7 @@ function WorkspaceApp({ session, onLogout }) {
             </div>
 
             {tab === 'overview' && <div className="tab-content">
-              <div className="analysis-heading"><span>✦</span><div><p className="eyebrow">AI EXPLANATION</p><h2>Tại sao ứng viên được {candidate.score} điểm?</h2></div></div>
+              <div className="analysis-heading"><span>✦</span><div><p className="eyebrow">{candidate.analysisMode === 'openai' ? `AI EXPLANATION · ${candidate.aiModel}` : 'RULE-BASED EXPLANATION'}</p><h2>Tại sao ứng viên được {candidate.score} điểm?</h2></div></div>
               <p className="summary">{candidate.summary}</p>
               <h3>Bằng chứng nổi bật</h3>
               <div className="evidence-compact">{candidate.evidence.slice(0, 4).map(item => <div key={item.skill}><span className={`status-icon ${item.status}`}>{item.status === 'found' ? '✓' : item.status === 'partial' ? '~' : '!'}</span><div><b>{item.skill}</b><p>{item.quote}</p><small>{item.source}</small></div></div>)}</div>
@@ -543,6 +621,10 @@ function WorkspaceApp({ session, onLogout }) {
   </div>
 }
 
+function WorkspaceState({ title, text, action, onAction }) {
+  return <div className="workspace-state"><span className="workspace-state-mark">T</span><h2>{title}</h2><p>{text}</p>{action && <button className="primary" onClick={onAction}>{action}</button>}</div>
+}
+
 function PipelineView({ jobs, candidates, onCreateJob, onUpload, onOpenCandidate }) {
   const departments = ['Tất cả phòng ban', ...new Set(jobs.map(job => job.department))]
   const [department, setDepartment] = useState('Tất cả phòng ban')
@@ -554,7 +636,6 @@ function PipelineView({ jobs, candidates, onCreateJob, onUpload, onOpenCandidate
     .filter(item => `${item.name} ${item.role}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => b.score - a.score)
   const selectedJob = jobs.find(job => job.id === selectedJobId)
-  const decisions = JSON.parse(localStorage.getItem('talentscreen-decisions') || '{}')
 
   return <div className="workspace pipeline-page">
     <section className="page-heading">
@@ -594,13 +675,13 @@ function PipelineView({ jobs, candidates, onCreateJob, onUpload, onOpenCandidate
         <thead><tr><th>ỨNG VIÊN</th><th>JOB ỨNG TUYỂN</th><th>MATCH SCORE</th><th>CONFIDENCE</th><th>TRẠNG THÁI HR</th><th></th></tr></thead>
         <tbody>{visibleCandidates.map(item => {
           const job = jobs.find(entry => entry.id === item.jobId)
-          const saved = decisions[item.id]
+          const saved = item.hrDecision
           return <tr key={item.id} onClick={() => onOpenCandidate(item, job)}>
             <td><div className="pipeline-person"><span>{item.initials}</span><div><b>{item.name}</b><small>{item.role}</small></div></div></td>
             <td><b className="job-name">{job?.title}</b><small className="job-code">{job?.code}</small></td>
             <td><div className="quick-score"><strong className={item.score >= 80 ? 'high' : item.score >= 70 ? 'medium' : 'low'}>{item.score}</strong><i><em style={{ width: `${item.score}%` }}/></i></div></td>
             <td><span className="confidence-chip">{item.confidence}%</span></td>
-            <td><span className={`decision-chip ${saved?.type || 'pending'}`}>{saved ? saved.type === 'advance' ? 'Đề xuất vòng tiếp' : 'Chưa đề xuất' : 'Chờ HR xem'}</span></td>
+            <td><span className={`decision-chip ${saved === 'Pass' ? 'advance' : saved ? 'hold' : 'pending'}`}>{saved ? saved === 'Pass' ? 'Đề xuất vòng tiếp' : saved === 'Reject' ? 'Không đề xuất' : 'Cần xem thêm' : 'Chờ HR xem'}</span></td>
             <td><button className="detail-link">Xem chi tiết →</button></td>
           </tr>
         })}</tbody>

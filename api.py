@@ -14,11 +14,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from starlette.concurrency import run_in_threadpool
 
 from ai_service import candidate_assessment, cosine_sim, embed_text, load_assessment
+from chunking import chunk_by_section
 from config import APP_ENV, CORS_ORIGINS, SECRET_KEY, TOKEN_TTL_MINUTES
 from database import get_conn, init_db, log_audit, now, transaction
 from document_service import DocumentError, extract_cv_text
+from embedding import embed_texts, embedding_model_name
+from extraction import extract_document, extract_regex_fields
+from llm_client import (
+    active_model_name,
+    active_provider_name,
+    analyze_retrieved_chunks,
+)
+from retrieval import RetrievalResult, StoredChunk, retrieve_for_rubric
+from schemas import AnalyzeRequest, CVAnalysisResponse, CVUploadResponse, ParsedFields
 from security_service import SecurityViolation, blind_index, decrypt, encrypt, redact_for_ai
 
 DEMO_ACCOUNTS = (("demo@vairecruiter.local", "Demo@123", "Nguyen Minh Anh", "HR Manager"), ("hr@vairecruiter.local", "HR@123456", "Tran Thu Ha", "Recruiter"))
@@ -53,6 +64,8 @@ class RegisterRequest(LoginRequest):
 class JobRequest(ApiModel):
     title: str = Field(min_length=2, max_length=160)
     description: str = Field(min_length=20, max_length=20_000)
+    department: str = Field(default="Engineering", min_length=2, max_length=120)
+    code: str | None = Field(default=None, max_length=40)
 
 
 class CandidateRequest(ApiModel):
@@ -70,6 +83,7 @@ class CandidateUpdate(ApiModel):
 class DecisionRequest(ApiModel):
     decision: Literal["Pass", "Hold", "Reject"]
     note: str = Field(default="", max_length=2_000)
+    override_score: int | None = Field(default=None, ge=0, le=100)
 
 
 def api_error(code: int, message: str) -> HTTPException:
@@ -152,7 +166,13 @@ async def http_error(_: Request, exc: HTTPException):
 
 
 @app.get("/health")
-def health() -> dict[str, str]: return {"status": "ok", "version": app.version}
+def health() -> dict[str, str]:
+    return {
+        "status": "ok",
+        "version": app.version,
+        "ai_provider": active_provider_name(),
+        "ai_model": active_model_name(),
+    }
 
 
 @app.post("/auth/login")
@@ -196,7 +216,7 @@ def dashboard(user: Annotated[dict[str, str], Depends(current_user)]) -> dict[st
 
 @app.get("/jobs")
 def list_jobs(user: Annotated[dict[str, str], Depends(current_user)], status_filter: Literal["open", "closed"] | None = Query(None, alias="status")) -> list[dict[str, object]]:
-    sql = "SELECT j.id,j.title,j.description,j.status,j.created_at,j.updated_at,COUNT(c.id) candidate_count FROM jobs j LEFT JOIN candidates c ON c.job_id=j.id"
+    sql = "SELECT j.id,j.title,j.description,j.department,j.code,j.status,j.created_at,j.updated_at,COUNT(c.id) candidate_count FROM jobs j LEFT JOIN candidates c ON c.job_id=j.id"
     params: tuple[str, ...] = ()
     if status_filter: sql += " WHERE j.status=?"; params = (status_filter,)
     sql += " GROUP BY j.id ORDER BY j.created_at DESC"
@@ -205,9 +225,10 @@ def list_jobs(user: Annotated[dict[str, str], Depends(current_user)], status_fil
 
 @app.post("/jobs", status_code=201)
 def create_job(payload: JobRequest, user: Annotated[dict[str, str], Depends(current_user)]) -> dict[str, object]:
-    job = {"id": str(uuid.uuid4()), "title": payload.title, "description": payload.description, "status": "open", "created_at": now()}
+    job_id = str(uuid.uuid4())
+    job = {"id": job_id, "title": payload.title, "description": payload.description, "department": payload.department, "code": payload.code or f"JOB-{job_id[:6].upper()}", "status": "open", "created_at": now()}
     with transaction() as conn:
-        conn.execute("INSERT INTO jobs (id,title,description,embedding,status,created_at) VALUES (?,?,?,?,?,?)", (job["id"], job["title"], job["description"], json.dumps(embed_text(payload.description)), job["status"], job["created_at"]))
+        conn.execute("INSERT INTO jobs (id,title,description,department,code,embedding,status,created_at) VALUES (?,?,?,?,?,?,?,?)", (job["id"], job["title"], job["description"], job["department"], job["code"], json.dumps(embed_text(payload.description)), job["status"], job["created_at"]))
         log_audit(conn, job["id"], "job.created", f"Created job: {job['title']}", user["id"])
     return {**job, "candidate_count": 0}
 
@@ -221,7 +242,7 @@ def list_candidates(user: Annotated[dict[str, str], Depends(current_user)], job_
         clauses.append("(c.name_blind_index = ? OR c.email_blind_index = ? OR j.title LIKE ?)")
         params.extend([blind_index(search), blind_index(search), f"%{search}%"])
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-    select = "SELECT c.id,c.job_id,c.name,c.email,c.encrypted_name,c.encrypted_email,c.encrypted_cv_text,c.encrypted_cv_filename,c.name_blind_index,c.email_blind_index,c.security_status,c.redaction_count,c.score,c.reasoning,c.created_at,c.updated_at,j.title job_title,d.decision,d.note,d.updated_at decision_updated_at FROM candidates c JOIN jobs j ON j.id=c.job_id LEFT JOIN decisions d ON d.candidate_id=c.id"
+    select = "SELECT c.id,c.job_id,c.name,c.email,c.encrypted_name,c.encrypted_email,c.encrypted_cv_text,c.encrypted_cv_filename,c.name_blind_index,c.email_blind_index,c.security_status,c.redaction_count,c.score,c.reasoning,c.created_at,c.updated_at,j.title job_title,d.decision,d.note,d.override_score,d.ai_score,d.updated_at decision_updated_at FROM candidates c JOIN jobs j ON j.id=c.job_id LEFT JOIN decisions d ON d.candidate_id=c.id"
     conn = get_conn(); total = conn.execute(f"SELECT COUNT(*) total FROM candidates c JOIN jobs j ON j.id=c.job_id{where}", params).fetchone()["total"]
     rows = conn.execute(f"{select}{where} ORDER BY c.created_at DESC LIMIT ? OFFSET ?", [*params, limit, offset]).fetchall(); conn.close()
     return {"items": [candidate_dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
@@ -229,7 +250,7 @@ def list_candidates(user: Annotated[dict[str, str], Depends(current_user)], job_
 
 @app.get("/candidates/{candidate_id}")
 def get_candidate(candidate_id: str, user: Annotated[dict[str, str], Depends(current_user)]) -> dict[str, object]:
-    conn = get_conn(); row = conn.execute("SELECT c.id,c.job_id,c.name,c.email,c.encrypted_name,c.encrypted_email,c.encrypted_cv_text,c.encrypted_cv_filename,c.name_blind_index,c.email_blind_index,c.security_status,c.redaction_count,c.score,c.reasoning,c.created_at,c.updated_at,j.title job_title,d.decision,d.note,d.updated_at decision_updated_at FROM candidates c JOIN jobs j ON j.id=c.job_id LEFT JOIN decisions d ON d.candidate_id=c.id WHERE c.id=?", (candidate_id,)).fetchone(); conn.close()
+    conn = get_conn(); row = conn.execute("SELECT c.id,c.job_id,c.name,c.email,c.encrypted_name,c.encrypted_email,c.encrypted_cv_text,c.encrypted_cv_filename,c.name_blind_index,c.email_blind_index,c.security_status,c.redaction_count,c.score,c.reasoning,c.created_at,c.updated_at,j.title job_title,d.decision,d.note,d.override_score,d.ai_score,d.updated_at decision_updated_at FROM candidates c JOIN jobs j ON j.id=c.job_id LEFT JOIN decisions d ON d.candidate_id=c.id WHERE c.id=?", (candidate_id,)).fetchone(); conn.close()
     if row is None: raise api_error(404, "Candidate not found")
     return candidate_dict(row)
 
@@ -244,12 +265,20 @@ def create_candidate(payload: CandidateRequest, user: Annotated[dict[str, str], 
         safe_jd = redact_for_ai(job["description"])
     except SecurityViolation as exc:
         raise api_error(422, str(exc))
-    embedding = embed_text(safe_cv.text); score = max(0.0, min(1.0, cosine_sim(json.loads(job["embedding"]), embedding))); assessment = candidate_assessment(safe_jd.text, safe_cv.text, score)
+    embedding = embed_text(safe_cv.text)
+    job_embedding = json.loads(job["embedding"])
+    refresh_job_embedding = len(job_embedding) != len(embedding)
+    if refresh_job_embedding:
+        job_embedding = embed_text(safe_jd.text)
+    score = max(0.0, min(1.0, cosine_sim(job_embedding, embedding)))
+    assessment = candidate_assessment(safe_jd.text, safe_cv.text, score)
     candidate = {"id": str(uuid.uuid4()), "job_id": payload.job_id, "name": payload.name, "email": payload.email, "score": score, "reasoning": json.dumps(assessment, ensure_ascii=False), "created_at": now(), "security_status": "protected", "redaction_count": safe_cv.redactions}
     with transaction() as write_conn:
+        if refresh_job_embedding:
+            write_conn.execute("UPDATE jobs SET embedding=?,updated_at=? WHERE id=?", (json.dumps(job_embedding), now(), job["id"]))
         write_conn.execute("""INSERT INTO candidates (id,job_id,name,email,cv_text,embedding,score,reasoning,created_at,encrypted_name,encrypted_email,encrypted_cv_text,name_blind_index,email_blind_index,security_status,redaction_count)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (candidate["id"], candidate["job_id"], f"Candidate {candidate['id'][:8]}", None, "[ENCRYPTED]", json.dumps(embedding), candidate["score"], candidate["reasoning"], candidate["created_at"], encrypt(candidate["name"]), encrypt(candidate["email"]) if candidate["email"] else None, encrypt(payload.cv_text), blind_index(candidate["name"]), blind_index(candidate["email"]) if candidate["email"] else None, candidate["security_status"], candidate["redaction_count"]))
-        log_audit(write_conn, candidate["id"], "candidate.created", "Created protected candidate record", user["id"])
+        log_audit(write_conn, candidate["id"], "candidate.created", f"Created protected candidate record; analysis={assessment.get('analysis_mode', 'unknown')}; model={assessment.get('model', 'unknown')}", user["id"])
     return {**candidate, "job_title": job["title"], "decision": None, "note": None, "assessment": assessment}
 
 
@@ -268,6 +297,45 @@ def update_candidate(candidate_id: str, payload: CandidateUpdate, user: Annotate
         values.extend([now(), candidate_id])
         conn.execute(f"UPDATE candidates SET {','.join(fields)},updated_at=? WHERE id=?", values)
         log_audit(conn, candidate_id, "candidate.updated", "Updated candidate profile", user["id"])
+    return get_candidate(candidate_id, user)
+
+
+@app.post("/candidates/{candidate_id}/rescreen")
+def rescreen_candidate(candidate_id: str, user: Annotated[dict[str, str], Depends(current_user)]) -> dict[str, object]:
+    conn = get_conn()
+    row = conn.execute(
+        "SELECT c.id,c.encrypted_cv_text,j.description,j.embedding FROM candidates c JOIN jobs j ON j.id=c.job_id WHERE c.id=?",
+        (candidate_id,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        raise api_error(404, "Candidate not found")
+    cv_text = decrypt(row["encrypted_cv_text"])
+    if not cv_text:
+        raise api_error(422, "Stored CV cannot be decrypted")
+    try:
+        safe_cv = redact_for_ai(cv_text)
+        safe_jd = redact_for_ai(row["description"])
+    except SecurityViolation as exc:
+        raise api_error(422, str(exc))
+    embedding = embed_text(safe_cv.text)
+    job_embedding = json.loads(row["embedding"])
+    refresh_job_embedding = len(job_embedding) != len(embedding)
+    if refresh_job_embedding:
+        job_embedding = embed_text(safe_jd.text)
+    score = max(0.0, min(1.0, cosine_sim(job_embedding, embedding)))
+    assessment = candidate_assessment(safe_jd.text, safe_cv.text, score)
+    with transaction() as write_conn:
+        if refresh_job_embedding:
+            write_conn.execute(
+                "UPDATE jobs SET embedding=?,updated_at=? WHERE id=(SELECT job_id FROM candidates WHERE id=?)",
+                (json.dumps(job_embedding), now(), candidate_id),
+            )
+        write_conn.execute(
+            "UPDATE candidates SET embedding=?,score=?,reasoning=?,redaction_count=?,updated_at=? WHERE id=?",
+            (json.dumps(embedding), score, json.dumps(assessment, ensure_ascii=False), safe_cv.redactions, now(), candidate_id),
+        )
+        log_audit(write_conn, candidate_id, "candidate.rescreened", f"Re-ran grounded CV-to-JD assessment; analysis={assessment.get('analysis_mode', 'unknown')}; model={assessment.get('model', 'unknown')}", user["id"])
     return get_candidate(candidate_id, user)
 
 
@@ -294,18 +362,181 @@ async def upload_candidate_cv(
     return result
 
 
+@app.post("/cv/upload", response_model=CVUploadResponse, status_code=201)
+async def upload_cv_for_rag(
+    user: Annotated[dict[str, str], Depends(current_user)],
+    cv: UploadFile = File(...),
+) -> CVUploadResponse:
+    """Parse, section-chunk and locally embed a CV without calling an LLM."""
+    filename = cv.filename or "cv"
+    try:
+        text = extract_document(filename, cv.content_type, await cv.read())
+        fields = ParsedFields.model_validate(extract_regex_fields(text))
+        chunks = chunk_by_section(text)
+        if not chunks:
+            raise DocumentError("The CV did not produce any readable sections.")
+        vectors = await run_in_threadpool(embed_texts, [chunk.text for chunk in chunks])
+    except DocumentError as exc:
+        raise api_error(422, str(exc))
+    except RuntimeError as exc:
+        raise api_error(503, str(exc))
+    except Exception as exc:
+        raise api_error(503, f"Local embedding failed: {type(exc).__name__}")
+    finally:
+        await cv.close()
+
+    cv_id = str(uuid.uuid4())
+    model_name = embedding_model_name()
+    with transaction() as conn:
+        conn.execute(
+            """INSERT INTO cv_documents
+               (id,user_id,encrypted_filename,encrypted_text,encrypted_fields,embedding_model,created_at)
+               VALUES (?,?,?,?,?,?,?)""",
+            (
+                cv_id,
+                user["id"],
+                encrypt(filename),
+                encrypt(text),
+                encrypt(fields.model_dump_json()),
+                model_name,
+                now(),
+            ),
+        )
+        conn.executemany(
+            """INSERT INTO cv_chunks
+               (id,document_id,position,section,encrypted_text,embedding)
+               VALUES (?,?,?,?,?,?)""",
+            [
+                (
+                    f"{cv_id}:{chunk.id}",
+                    cv_id,
+                    position,
+                    chunk.section,
+                    encrypt(chunk.text),
+                    json.dumps(vector),
+                )
+                for position, (chunk, vector) in enumerate(zip(chunks, vectors, strict=True), start=1)
+            ],
+        )
+        log_audit(
+            conn,
+            cv_id,
+            "cv.rag_uploaded",
+            f"Parsed {len(chunks)} sections and embedded locally with {model_name}",
+            user["id"],
+        )
+    return CVUploadResponse(
+        id=cv_id,
+        filename=filename,
+        fields=fields,
+        chunk_count=len(chunks),
+        embedding_model=model_name,
+    )
+
+
+@app.post("/cv/{cv_id}/analyze", response_model=CVAnalysisResponse)
+async def analyze_cv_with_rag(
+    cv_id: str,
+    payload: AnalyzeRequest,
+    user: Annotated[dict[str, str], Depends(current_user)],
+) -> CVAnalysisResponse:
+    """Retrieve rubric evidence locally and send only redacted top-k chunks to Gemini."""
+    conn = get_conn()
+    document = conn.execute(
+        "SELECT id,embedding_model FROM cv_documents WHERE id=? AND user_id=?",
+        (cv_id, user["id"]),
+    ).fetchone()
+    rows = conn.execute(
+        """SELECT id,section,encrypted_text,embedding
+           FROM cv_chunks WHERE document_id=? ORDER BY position""",
+        (cv_id,),
+    ).fetchall() if document else []
+    conn.close()
+    if document is None:
+        raise api_error(404, "CV not found")
+    if document["embedding_model"] != embedding_model_name():
+        raise api_error(409, "The configured embedding model differs from the model used at upload")
+
+    chunks: list[StoredChunk] = []
+    for row in rows:
+        text = decrypt(row["encrypted_text"])
+        if text is None:
+            raise api_error(422, "A stored CV chunk could not be decrypted")
+        chunks.append(
+            StoredChunk(
+                id=row["id"],
+                section=row["section"],
+                text=text,
+                embedding=json.loads(row["embedding"]),
+            )
+        )
+    try:
+        retrieval = await run_in_threadpool(
+            retrieve_for_rubric, chunks, payload.rubric, payload.top_k
+        )
+        safe_chunks = []
+        for chunk in retrieval.chunks:
+            safe = redact_for_ai(chunk.text)
+            safe_chunks.append(
+                StoredChunk(
+                    id=chunk.id,
+                    section=chunk.section,
+                    text=safe.text,
+                    embedding=chunk.embedding,
+                )
+            )
+        safe_retrieval = RetrievalResult(chunks=safe_chunks, matches=retrieval.matches)
+        result = await run_in_threadpool(
+            analyze_retrieved_chunks, payload.rubric, safe_retrieval
+        )
+    except SecurityViolation as exc:
+        raise api_error(422, str(exc))
+    except RuntimeError as exc:
+        raise api_error(503, str(exc))
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise api_error(
+            502,
+            f"{active_provider_name()} returned an invalid grounded analysis: {exc}",
+        )
+    except Exception as exc:
+        raise api_error(
+            502,
+            f"{active_provider_name()} request failed: {type(exc).__name__}",
+        )
+
+    with transaction() as write_conn:
+        log_audit(
+            write_conn,
+            cv_id,
+            "cv.rag_analyzed",
+            f"Retrieved {len(safe_retrieval.chunks)} chunks; provider={active_provider_name()}; model={active_model_name()}",
+            user["id"],
+        )
+    return CVAnalysisResponse(
+        **result.model_dump(),
+        cv_id=cv_id,
+        provider=active_provider_name(),
+        model=active_model_name(),
+        retrieved_chunk_count=len(safe_retrieval.chunks),
+    )
+
+
 @app.put("/candidates/{candidate_id}/decision")
-def save_decision(candidate_id: str, payload: DecisionRequest, user: Annotated[dict[str, str], Depends(current_user)]) -> dict[str, str]:
+def save_decision(candidate_id: str, payload: DecisionRequest, user: Annotated[dict[str, str], Depends(current_user)]) -> dict[str, object]:
     saved_at = now()
     with transaction() as conn:
-        if conn.execute("SELECT id FROM candidates WHERE id=?", (candidate_id,)).fetchone() is None: raise api_error(404, "Candidate not found")
+        candidate = conn.execute("SELECT id,score,reasoning FROM candidates WHERE id=?", (candidate_id,)).fetchone()
+        if candidate is None: raise api_error(404, "Candidate not found")
+        assessment = load_assessment(candidate["reasoning"])
+        ai_score = sum(assessment["score_breakdown"].values()) or round(candidate["score"] * 100)
         existing = conn.execute("SELECT id FROM decisions WHERE candidate_id=? ORDER BY created_at DESC LIMIT 1", (candidate_id,)).fetchone()
         if existing:
-            conn.execute("UPDATE decisions SET decision=?,note=?,updated_at=? WHERE id=?", (payload.decision, payload.note, saved_at, existing["id"]))
+            conn.execute("UPDATE decisions SET decision=?,note=?,override_score=?,ai_score=?,updated_at=? WHERE id=?", (payload.decision, payload.note, payload.override_score, ai_score, saved_at, existing["id"]))
         else:
-            conn.execute("INSERT INTO decisions (id,candidate_id,decision,note,created_at,updated_at) VALUES (?,?,?,?,?,?)", (str(uuid.uuid4()), candidate_id, payload.decision, payload.note, saved_at, saved_at))
-        log_audit(conn, candidate_id, "candidate.decision_saved", f"Decision: {payload.decision}", user["id"])
-    return {"decision": payload.decision, "note": payload.note, "updated_at": saved_at}
+            conn.execute("INSERT INTO decisions (id,candidate_id,decision,note,override_score,ai_score,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)", (str(uuid.uuid4()), candidate_id, payload.decision, payload.note, payload.override_score, ai_score, saved_at, saved_at))
+        override_detail = f", HR override: {payload.override_score}" if payload.override_score is not None else ""
+        log_audit(conn, candidate_id, "candidate.decision_saved", f"Decision: {payload.decision}{override_detail}", user["id"])
+    return {"decision": payload.decision, "note": payload.note, "override_score": payload.override_score, "updated_at": saved_at}
 
 
 @app.get("/analytics")
