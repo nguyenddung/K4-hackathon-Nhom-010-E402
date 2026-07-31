@@ -210,8 +210,8 @@ Trả về JSON hợp lệ bằng tiếng Việt với:
                     temperature=0.2,
                 )
             )
-            if not assessment["evidence"]:
-                raise ValueError(f"{active_provider_name()} response did not contain evidence")
+            if "evidence" not in assessment:
+                assessment["evidence"] = []
             assessment.update(
                 {
                     "analysis_mode": AI_PROVIDER,
@@ -223,11 +223,12 @@ Trả về JSON hợp lệ bằng tiếng Việt với:
             return assessment
         except Exception as exc:
             last_error = exc
+    error_text = f"{type(last_error).__name__}: {last_error}" if last_error else f"{active_provider_name()} request failed after 2 attempts"
     return _fallback(
         score,
         job_text,
         cv_text,
-        f"{type(last_error).__name__}: {active_provider_name()} request failed after 2 attempts",
+        error_text,
     )
 
 
