@@ -83,10 +83,26 @@ ASSESSMENT_SCHEMA = {
                 "type": "object",
                 "additionalProperties": False,
                 "properties": {
-                    "skills": {"type": "integer"},
-                    "experience": {"type": "integer"},
-                    "projects": {"type": "integer"},
-                    "other": {"type": "integer"},
+                    "skills": {
+                        "type": "object",
+                        "properties": {"score": {"type": "integer"}, "reason": {"type": "string"}},
+                        "required": ["score", "reason"]
+                    },
+                    "experience": {
+                        "type": "object",
+                        "properties": {"score": {"type": "integer"}, "reason": {"type": "string"}},
+                        "required": ["score", "reason"]
+                    },
+                    "projects": {
+                        "type": "object",
+                        "properties": {"score": {"type": "integer"}, "reason": {"type": "string"}},
+                        "required": ["score", "reason"]
+                    },
+                    "other": {
+                        "type": "object",
+                        "properties": {"score": {"type": "integer"}, "reason": {"type": "string"}},
+                        "required": ["score", "reason"]
+                    },
                 },
                 "required": ["skills", "experience", "projects", "other"],
             },
@@ -163,7 +179,12 @@ def _fallback(_: float, job_text: str, cv_text: str, reason: str = "OpenAI API i
         "model": "grounded-rules-v1",
         "fallback_reason": reason,
         "summary": f"CV cung cấp bằng chứng cho {len(found)}/{len(required)} yêu cầu kỹ thuật được nhận diện từ JD. Các nội dung còn thiếu được đánh dấu để HR xác minh, không được AI tự suy diễn.",
-        "score_breakdown": {"skills": skills, "experience": experience, "projects": projects, "other": max(0, total - skills - experience - projects)},
+        "score_breakdown": {
+            "skills": {"score": skills, "reason": f"Đạt {len(found)}/{len(required)} kỹ năng."},
+            "experience": {"score": experience, "reason": "Đánh giá dựa trên số năm kinh nghiệm."},
+            "projects": {"score": projects, "reason": "Đánh giá qua quy mô dự án và kiến trúc."},
+            "other": {"score": max(0, total - skills - experience - projects), "reason": "Điểm cộng từ kỹ năng tối ưu, vận hành hệ thống."}
+        },
         "confidence": min(92, max(45, 55 + len(cv_text) // 180 + round(ratio * 20))),
         "recommendation": "advance" if total >= 70 else "needs_review",
         "strengths": [f"Có bằng chứng về {name}." for name, _ in found[:3]],
@@ -192,7 +213,7 @@ REDACTED CV:
 
 Trả về JSON hợp lệ bằng tiếng Việt với:
 - summary: 2-3 câu giải thích vì sao đạt mức điểm này
-- score_breakdown: skills tối đa 40, experience tối đa 25, projects tối đa 20, other tối đa 15
+- score_breakdown: object chứa 4 tiêu chí (skills tối đa 40, experience tối đa 25, projects tối đa 20, other tối đa 15). Mỗi tiêu chí phải là một object gồm 'score' (điểm) và 'reason' (lý do cụ thể vì sao trừ điểm hoặc cho điểm, ghi rất ngắn gọn).
 - confidence: 0-100, phản ánh mức đầy đủ của bằng chứng chứ không phải mức phù hợp
 - recommendation: advance hoặc needs_review
 - strengths: tối đa 3 điểm mạnh có bằng chứng
@@ -243,6 +264,11 @@ def normalize_assessment(assessment: Any) -> dict[str, Any]:
     if not isinstance(assessment, dict): assessment = {}
     breakdown = assessment.get("score_breakdown") if isinstance(assessment.get("score_breakdown"), dict) else {}
     evidence = assessment.get("evidence") if isinstance(assessment.get("evidence"), list) else []
+    def _parse_metric(val, cap):
+        if isinstance(val, dict):
+            return {"score": max(0, min(cap, int(val.get("score") or 0))), "reason": str(val.get("reason") or "").strip()}
+        return {"score": max(0, min(cap, int(val or 0))), "reason": ""}
+
     return {
         "analysis_mode": assessment.get("analysis_mode") if assessment.get("analysis_mode") in {"openai", "gemini", "groq"} else "fallback",
         "provider": str(assessment.get("provider", "unknown")),
@@ -250,7 +276,12 @@ def normalize_assessment(assessment: Any) -> dict[str, Any]:
         "fallback_reason": str(assessment.get("fallback_reason", "")),
         "summary": str(assessment.get("summary", "Không đủ bằng chứng để đánh giá.")).strip(),
         "strengths": _items(assessment.get("strengths")), "gaps": _items(assessment.get("gaps")), "interview_questions": _items(assessment.get("interview_questions")),
-        "score_breakdown": {key: max(0, min(cap, int(breakdown.get(key, 0) or 0))) for key, cap in {"skills": 40, "experience": 25, "projects": 20, "other": 15}.items()},
+        "score_breakdown": {
+            "skills": _parse_metric(breakdown.get("skills"), 40),
+            "experience": _parse_metric(breakdown.get("experience"), 25),
+            "projects": _parse_metric(breakdown.get("projects"), 20),
+            "other": _parse_metric(breakdown.get("other"), 15),
+        },
         "confidence": max(0, min(100, int(assessment.get("confidence", 0) or 0))),
         "recommendation": "advance" if assessment.get("recommendation") == "advance" else "needs_review",
         "evidence": [{"requirement": str(item.get("requirement", "Yêu cầu")), "evidence": str(item.get("evidence", "Không đủ bằng chứng để đánh giá.")), "status": "found" if item.get("status") == "found" else "missing"} for item in evidence if isinstance(item, dict)][:8],

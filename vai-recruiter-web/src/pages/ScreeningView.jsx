@@ -74,10 +74,13 @@ export default function ScreeningView({
             </div>
           </div>
           <div className="p-[20px_0_9px] grid gap-[13px]">
-            {candidate.breakdown.map(([name, value, max]) => <div key={name} className="grid grid-cols-[100px_1fr_38px] items-center gap-[10px]">
-              <span className="text-slate-700 text-sm">{name}</span>
-              <i className="h-[5px] rounded-[5px] bg-[#e0e5e1] overflow-hidden"><em className="block h-full bg-forest rounded-[5px]" style={{ width: `${value / max * 100}%` }} /></i>
-              <b className="text-right font-mono text-sm font-semibold">{value}<small className="text-slate-400 text-xs">/{max}</small></b>
+            {candidate.breakdown.map(([name, value, max, reason]) => <div key={name} className="grid gap-[4px]">
+              <div className="grid grid-cols-[100px_1fr_38px] items-center gap-[10px]">
+                <span className="text-slate-700 text-sm font-medium">{name}</span>
+                <i className="h-[5px] rounded-[5px] bg-[#e0e5e1] overflow-hidden"><em className="block h-full bg-forest rounded-[5px]" style={{ width: `${value / max * 100}%` }} /></i>
+                <b className="text-right font-mono text-sm font-semibold">{value}<small className="text-slate-400 text-xs">/{max}</small></b>
+              </div>
+              {reason && <p className="text-xs text-slate-500 m-[0_0_2px_110px] leading-5">{reason}</p>}
             </div>)}
           </div>
           <div className="mt-[13px] p-[11px] flex items-start gap-[9px] rounded-[6px] bg-[#eff4f0] text-forest max-[960px]:col-span-2">

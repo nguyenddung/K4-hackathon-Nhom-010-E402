@@ -72,15 +72,25 @@ export default function Workspace({ session, onLogout }) {
     }
   }
 
-  const uploadCv = async event => {
+  const uploadCv = async (event, mode) => {
     event.preventDefault()
     setUploadError('')
     const data = new FormData(event.currentTarget)
-    const file = selectedFile || data.get('cv')
-    if (!file?.name) return setUploadError('Vui lòng chọn CV.')
-    const extension = file.name.split('.').pop()?.toLowerCase()
-    if (!['pdf', 'docx'].includes(extension)) return setUploadError('Chỉ hỗ trợ PDF hoặc DOCX.')
-    if (file.size > 10 * 1024 * 1024) return setUploadError('CV phải nhỏ hơn 10 MB.')
+    
+    let file = null
+    let cvText = ''
+    
+    if (mode === 'file') {
+      file = selectedFile || data.get('cv')
+      if (!file?.name) return setUploadError('Vui lòng chọn CV.')
+      const extension = file.name.split('.').pop()?.toLowerCase()
+      if (!['pdf', 'docx'].includes(extension)) return setUploadError('Chỉ hỗ trợ PDF hoặc DOCX.')
+      if (file.size > 10 * 1024 * 1024) return setUploadError('CV phải nhỏ hơn 10 MB.')
+    } else {
+      cvText = data.get('cv_text')
+      if (!cvText || cvText.length < 30) return setUploadError('Vui lòng nhập ít nhất 30 ký tự nội dung CV.')
+    }
+
     setUploading(true)
     try {
       const headers = { Authorization: `Bearer ${session.access_token}` }
@@ -98,15 +108,40 @@ export default function Workspace({ session, onLogout }) {
         if (!createResponse.ok) throw new Error('Không thể tạo vị trí trên API.')
         apiJob = await createResponse.json()
       }
-      const uploadData = new FormData()
-      uploadData.append('job_id', apiJob.id)
-      uploadData.append('name', data.get('name'))
-      uploadData.append('email', data.get('email'))
-      uploadData.append('cv', file)
-      const response = await fetch('/api/candidates/upload', { method: 'POST', headers, body: uploadData })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.detail || 'Không thể phân tích CV.')
-      const newCandidate = candidateFromApi(payload, localJob.id, file.name)
+
+      let payload
+      let fileName
+
+      if (mode === 'file') {
+        const uploadData = new FormData()
+        uploadData.append('job_id', apiJob.id)
+        uploadData.append('name', data.get('name'))
+        if (data.get('email')) uploadData.append('email', data.get('email'))
+        uploadData.append('cv', file)
+        
+        const response = await fetch('/api/candidates/upload', { method: 'POST', headers, body: uploadData })
+        payload = await response.json()
+        if (!response.ok) throw new Error(payload.detail || 'Không thể phân tích CV.')
+        fileName = file.name
+      } else {
+        const textPayload = {
+          job_id: apiJob.id,
+          name: data.get('name'),
+          cv_text: cvText
+        }
+        if (data.get('email')) textPayload.email = data.get('email')
+
+        const response = await fetch('/api/candidates', { 
+          method: 'POST', 
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify(textPayload) 
+        })
+        payload = await response.json()
+        if (!response.ok) throw new Error(payload.detail || 'Không thể phân tích CV.')
+        fileName = 'Nhập văn bản'
+      }
+
+      const newCandidate = candidateFromApi(payload, localJob.id, fileName)
       setCandidateList(items => [newCandidate, ...items])
       setJobId(localJob.id)
       setCandidateId(newCandidate.id)
@@ -114,7 +149,7 @@ export default function Workspace({ session, onLogout }) {
       setTab('overview')
       setUploadOpen(false)
       setSelectedFile(null)
-      const eventItem = { id: Date.now(), time: 'Vừa xong', actor: 'TalentScreen AI', action: 'Upload & phân tích CV', detail: `${newCandidate.name} · ${newCandidate.score}/100 · ${file.name}` }
+      const eventItem = { id: Date.now(), time: 'Vừa xong', actor: 'TalentScreen AI', action: 'Upload & phân tích CV', detail: `${newCandidate.name} · ${newCandidate.score}/100 · ${fileName}` }
       const nextAudit = [eventItem, ...audit]
       setAudit(nextAudit)
       localStorage.setItem('talentscreen-audit', JSON.stringify(nextAudit))

@@ -2,10 +2,10 @@ export function candidateFromApi(result, localJobId, fileName) {
   const assessment = result.assessment || {}
   const parts = assessment.score_breakdown || {}
   const breakdown = [
-    ['Kỹ năng', Number(parts.skills || 0), 40],
-    ['Kinh nghiệm', Number(parts.experience || 0), 25],
-    ['Dự án', Number(parts.projects || 0), 20],
-    ['Yếu tố khác', Number(parts.other || 0), 15],
+    ['Kỹ năng', Number(parts.skills?.score ?? parts.skills ?? 0), 40, parts.skills?.reason || ''],
+    ['Kinh nghiệm', Number(parts.experience?.score ?? parts.experience ?? 0), 25, parts.experience?.reason || ''],
+    ['Dự án', Number(parts.projects?.score ?? parts.projects ?? 0), 20, parts.projects?.reason || ''],
+    ['Yếu tố khác', Number(parts.other?.score ?? parts.other ?? 0), 15, parts.other?.reason || ''],
   ]
   const breakdownTotal = breakdown.reduce((sum, item) => sum + item[1], 0)
   const score = breakdownTotal || Math.round(Number(result.score || 0) * 100)
