@@ -5,15 +5,15 @@ import Workspace from './pages/Workspace'
 
 function App() {
   const [session, setSession] = useState(() => JSON.parse(localStorage.getItem('talentscreen-session') || 'null'))
-  
+
   if (!session) {
     return <AuthScreen onAuthenticated={setSession} />
   }
 
   return (
-    <Workspace 
-      session={session} 
-      onLogout={() => { localStorage.removeItem('talentscreen-session'); setSession(null) }} 
+    <Workspace
+      session={session}
+      onLogout={() => { localStorage.removeItem('talentscreen-session'); setSession(null) }}
     />
   )
 }

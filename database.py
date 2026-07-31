@@ -52,6 +52,8 @@ def init_db() -> None:
                 id TEXT PRIMARY KEY,
                 title TEXT NOT NULL,
                 description TEXT NOT NULL,
+                department TEXT NOT NULL DEFAULT 'Engineering',
+                code TEXT,
                 embedding TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT,
@@ -82,6 +84,8 @@ def init_db() -> None:
                 candidate_id TEXT NOT NULL UNIQUE REFERENCES candidates(id) ON DELETE CASCADE,
                 decision TEXT NOT NULL CHECK(decision IN ('Pass', 'Hold', 'Reject')),
                 note TEXT NOT NULL DEFAULT '',
+                override_score INTEGER,
+                ai_score INTEGER,
                 created_at TEXT NOT NULL,
                 updated_at TEXT
             );
@@ -93,20 +97,42 @@ def init_db() -> None:
                 actor_id TEXT,
                 created_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS cv_documents (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                encrypted_filename TEXT NOT NULL,
+                encrypted_text TEXT NOT NULL,
+                encrypted_fields TEXT NOT NULL,
+                embedding_model TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS cv_chunks (
+                id TEXT PRIMARY KEY,
+                document_id TEXT NOT NULL REFERENCES cv_documents(id) ON DELETE CASCADE,
+                position INTEGER NOT NULL,
+                section TEXT NOT NULL,
+                encrypted_text TEXT NOT NULL,
+                embedding TEXT NOT NULL,
+                UNIQUE(document_id, position)
+            );
             CREATE INDEX IF NOT EXISTS idx_candidates_job_created ON candidates(job_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_candidates_name ON candidates(name COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_audit_entity_created ON audit_log(entity_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_cv_documents_user_created ON cv_documents(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_cv_chunks_document_position ON cv_chunks(document_id, position);
         """)
         # Safely extend databases created by earlier project versions.
         for table, column, definition in (
             ("users", "updated_at", "TEXT"), ("jobs", "updated_at", "TEXT"),
             ("jobs", "status", "TEXT NOT NULL DEFAULT 'open'"),
+            ("jobs", "department", "TEXT NOT NULL DEFAULT 'Engineering'"), ("jobs", "code", "TEXT"),
             ("candidates", "email", "TEXT"), ("candidates", "updated_at", "TEXT"),
             ("candidates", "encrypted_name", "TEXT"), ("candidates", "encrypted_email", "TEXT"),
             ("candidates", "name_blind_index", "TEXT"), ("candidates", "email_blind_index", "TEXT"),
             ("candidates", "encrypted_cv_text", "TEXT"), ("candidates", "encrypted_cv_filename", "TEXT"),
             ("candidates", "security_status", "TEXT NOT NULL DEFAULT 'protected'"), ("candidates", "redaction_count", "INTEGER NOT NULL DEFAULT 0"),
-            ("decisions", "updated_at", "TEXT"), ("audit_log", "actor_id", "TEXT"),
+            ("decisions", "updated_at", "TEXT"), ("decisions", "override_score", "INTEGER"),
+            ("decisions", "ai_score", "INTEGER"), ("audit_log", "actor_id", "TEXT"),
         ):
             columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
             if column not in columns:

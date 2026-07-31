@@ -8,10 +8,17 @@ from typing import Any
 
 import numpy as np
 
-from config import CHAT_MODEL, EMBED_MODEL, MAX_OUTPUT_TOKENS
+from config import AI_PROVIDER, EMBED_MODEL
+from llm_client import (
+    active_model_name,
+    active_provider_name,
+    generate_structured_json,
+)
 
 
 def get_client():
+    if AI_PROVIDER != "openai":
+        return None
     key = os.environ.get("OPENAI_API_KEY", "").strip()
     if len(key) < 20 or key.casefold() in {"key", "your-key", "sk-...", "replace-me"}:
         return None
@@ -41,6 +48,8 @@ def embed_text(text: str) -> list[float]:
 
 def cosine_sim(first: list[float], second: list[float]) -> float:
     left, right = np.array(first), np.array(second)
+    if left.shape != right.shape:
+        return 0.0
     if not np.linalg.norm(left) or not np.linalg.norm(right):
         return 0.0
     return float(np.dot(left, right) / (np.linalg.norm(left) * np.linalg.norm(right)))
@@ -62,6 +71,50 @@ SKILLS = {
     "Production": ("production", "vận hành", "monitoring", "observability",),
 }
 
+ASSESSMENT_SCHEMA = {
+    "name": "talent_screen_assessment",
+    "strict": True,
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "summary": {"type": "string"},
+            "score_breakdown": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "skills": {"type": "integer"},
+                    "experience": {"type": "integer"},
+                    "projects": {"type": "integer"},
+                    "other": {"type": "integer"},
+                },
+                "required": ["skills", "experience", "projects", "other"],
+            },
+            "confidence": {"type": "integer"},
+            "recommendation": {"type": "string", "enum": ["advance", "needs_review"]},
+            "strengths": {"type": "array", "items": {"type": "string"}, "maxItems": 3},
+            "evidence": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 8,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "requirement": {"type": "string"},
+                        "evidence": {"type": "string"},
+                        "status": {"type": "string", "enum": ["found", "missing"]},
+                    },
+                    "required": ["requirement", "evidence", "status"],
+                },
+            },
+            "gaps": {"type": "array", "items": {"type": "string"}, "maxItems": 4},
+            "interview_questions": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 3},
+        },
+        "required": ["summary", "score_breakdown", "confidence", "recommendation", "strengths", "evidence", "gaps", "interview_questions"],
+    },
+}
+
 
 def _has(text: str, aliases: tuple[str, ...]) -> bool:
     lowered = text.casefold()
@@ -73,7 +126,7 @@ def _evidence_line(cv_text: str, aliases: tuple[str, ...]) -> str:
     return next((line[:240] for line in lines if _has(line, aliases)), "Có đề cập trong CV.")
 
 
-def _fallback(_: float, job_text: str, cv_text: str) -> dict[str, Any]:
+def _fallback(_: float, job_text: str, cv_text: str, reason: str = "OpenAI API is not configured") -> dict[str, Any]:
     required = [(name, aliases) for name, aliases in SKILLS.items() if _has(job_text, aliases)]
     required = required or list(SKILLS.items())[:6]
     found = [(name, aliases) for name, aliases in required if _has(cv_text, aliases)]
@@ -105,6 +158,10 @@ def _fallback(_: float, job_text: str, cv_text: str) -> dict[str, Any]:
     if len(questions) < 2:
         questions.append("Quyết định kỹ thuật khó nhất trong dự án backend gần đây của bạn là gì?")
     return {
+        "analysis_mode": "fallback",
+        "provider": "local",
+        "model": "grounded-rules-v1",
+        "fallback_reason": reason,
         "summary": f"CV cung cấp bằng chứng cho {len(found)}/{len(required)} yêu cầu kỹ thuật được nhận diện từ JD. Các nội dung còn thiếu được đánh dấu để HR xác minh, không được AI tự suy diễn.",
         "score_breakdown": {"skills": skills, "experience": experience, "projects": projects, "other": max(0, total - skills - experience - projects)},
         "confidence": min(92, max(45, 55 + len(cv_text) // 180 + round(ratio * 20))),
@@ -117,11 +174,15 @@ def _fallback(_: float, job_text: str, cv_text: str) -> dict[str, Any]:
 
 
 def candidate_assessment(job_text: str, cv_text: str, score: float) -> dict[str, Any]:
-    client = get_client()
-    if client is None:
-        return _fallback(score, job_text, cv_text)
-    prompt = f"""You are TalentScreen AI, an evidence-grounded recruiting assistant for a Backend Developer role.
-Only use the job description and redacted CV below. Never infer missing facts. If evidence is absent, say exactly that it is insufficient and add a verification question. Do not recommend hiring/rejection; HR makes the decision.
+    prompt = f"""Bạn là TalentScreen AI, trợ lý sàng lọc ứng viên Backend Developer cho HR.
+
+NGUYÊN TẮC BẮT BUỘC:
+- Chỉ sử dụng thông tin trong JD và CV đã ẩn danh bên dưới.
+- Không suy diễn kỹ năng, số năm kinh nghiệm, vai trò hay kết quả nếu CV không nêu rõ.
+- Mỗi bằng chứng phải trích lại một đoạn ngắn, cụ thể từ CV; không viết nhận xét chung chung.
+- Với yêu cầu thiếu bằng chứng, ghi status="missing", giải thích chính xác điều chưa biết và tạo câu hỏi phỏng vấn để xác minh.
+- AI chỉ đề xuất "advance" hoặc "needs_review"; không tự quyết định tuyển hoặc loại.
+- Tổng điểm phải bằng tổng skills + experience + projects + other.
 
 JOB DESCRIPTION:
 {job_text}
@@ -129,12 +190,45 @@ JOB DESCRIPTION:
 REDACTED CV:
 {cv_text}
 
-Return valid JSON in Vietnamese with: summary, score_breakdown (skills max 40, experience max 25, projects max 20, other max 15), confidence (0-100), recommendation (advance|needs_review), strengths (max 3), evidence (array of {{requirement,evidence,status}}; status found|missing), gaps (max 4), interview_questions (2-3)."""
-    try:
-        response = client.chat.completions.create(model=CHAT_MODEL, messages=[{"role": "user", "content": prompt}], temperature=0.2, max_tokens=MAX_OUTPUT_TOKENS, response_format={"type": "json_object"})
-        return normalize_assessment(json.loads(response.choices[0].message.content or "{}"))
-    except Exception:
-        return _fallback(score, job_text, cv_text)
+Trả về JSON hợp lệ bằng tiếng Việt với:
+- summary: 2-3 câu giải thích vì sao đạt mức điểm này
+- score_breakdown: skills tối đa 40, experience tối đa 25, projects tối đa 20, other tối đa 15
+- confidence: 0-100, phản ánh mức đầy đủ của bằng chứng chứ không phải mức phù hợp
+- recommendation: advance hoặc needs_review
+- strengths: tối đa 3 điểm mạnh có bằng chứng
+- evidence: mảng {{requirement,evidence,status}}, status found hoặc missing
+- gaps: tối đa 4 khoảng trống cụ thể
+- interview_questions: 2-3 câu hỏi trực tiếp từ gaps."""
+    last_error: Exception | None = None
+    for _ in range(2):
+        try:
+            assessment = normalize_assessment(
+                generate_structured_json(
+                    prompt,
+                    ASSESSMENT_SCHEMA["schema"],
+                    ASSESSMENT_SCHEMA["name"],
+                    temperature=0.2,
+                )
+            )
+            if not assessment["evidence"]:
+                raise ValueError(f"{active_provider_name()} response did not contain evidence")
+            assessment.update(
+                {
+                    "analysis_mode": AI_PROVIDER,
+                    "provider": active_provider_name(),
+                    "model": active_model_name(),
+                    "fallback_reason": "",
+                }
+            )
+            return assessment
+        except Exception as exc:
+            last_error = exc
+    return _fallback(
+        score,
+        job_text,
+        cv_text,
+        f"{type(last_error).__name__}: {active_provider_name()} request failed after 2 attempts",
+    )
 
 
 def load_assessment(reasoning: str) -> dict[str, Any]:
@@ -149,6 +243,10 @@ def normalize_assessment(assessment: Any) -> dict[str, Any]:
     breakdown = assessment.get("score_breakdown") if isinstance(assessment.get("score_breakdown"), dict) else {}
     evidence = assessment.get("evidence") if isinstance(assessment.get("evidence"), list) else []
     return {
+        "analysis_mode": assessment.get("analysis_mode") if assessment.get("analysis_mode") in {"openai", "gemini"} else "fallback",
+        "provider": str(assessment.get("provider", "unknown")),
+        "model": str(assessment.get("model", "unknown")),
+        "fallback_reason": str(assessment.get("fallback_reason", "")),
         "summary": str(assessment.get("summary", "Không đủ bằng chứng để đánh giá.")).strip(),
         "strengths": _items(assessment.get("strengths")), "gaps": _items(assessment.get("gaps")), "interview_questions": _items(assessment.get("interview_questions")),
         "score_breakdown": {key: max(0, min(cap, int(breakdown.get(key, 0) or 0))) for key, cap in {"skills": 40, "experience": 25, "projects": 20, "other": 15}.items()},
