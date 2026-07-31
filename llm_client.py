@@ -7,7 +7,7 @@ import os
 from functools import lru_cache
 from typing import Any
 
-from config import AI_PROVIDER, CHAT_MODEL, GEMINI_MODEL, MAX_OUTPUT_TOKENS
+from config import AI_PROVIDER, CHAT_MODEL, GEMINI_MODEL, GROQ_MODEL, MAX_OUTPUT_TOKENS
 from retrieval import RetrievalResult
 from schemas import CVAnalysisCore, RubricCriterion
 
@@ -92,12 +92,32 @@ def _gemini_client():
     return genai.Client(api_key=api_key)
 
 
+@lru_cache(maxsize=1)
+def _groq_client():
+    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is not configured")
+    try:
+        from groq import Groq
+    except ImportError as exc:
+        raise RuntimeError("groq is not installed; run: pip install -r requirements.txt") from exc
+    return Groq(api_key=api_key)
+
+
 def active_provider_name() -> str:
-    return "OpenAI" if AI_PROVIDER == "openai" else "Google Gemini"
+    if AI_PROVIDER == "openai":
+        return "OpenAI"
+    if AI_PROVIDER == "groq":
+        return "Groq"
+    return "Google Gemini"
 
 
 def active_model_name() -> str:
-    return CHAT_MODEL if AI_PROVIDER == "openai" else GEMINI_MODEL
+    if AI_PROVIDER == "openai":
+        return CHAT_MODEL
+    if AI_PROVIDER == "groq":
+        return GROQ_MODEL
+    return GEMINI_MODEL
 
 
 def generate_structured_json(
@@ -117,6 +137,16 @@ def generate_structured_json(
                 "type": "json_schema",
                 "json_schema": {"name": schema_name, "strict": True, "schema": schema},
             },
+        )
+        raw = response.choices[0].message.content or "{}"
+        result = parse_json_object(raw)
+    elif AI_PROVIDER == "groq":
+        response = _groq_client().chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            max_tokens=MAX_OUTPUT_TOKENS,
+            response_format={"type": "json_object"},
         )
         raw = response.choices[0].message.content or "{}"
         result = parse_json_object(raw)
