@@ -59,6 +59,46 @@ def _items(value: Any) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()] if isinstance(value, list) else []
 
 
+def _validate_assessment_payload(assessment: Any) -> dict[str, Any]:
+    """Reject incomplete provider output before it can be presented as AI analysis."""
+    if not isinstance(assessment, dict):
+        raise ValueError("AI assessment must be a JSON object")
+
+    required = {
+        "summary",
+        "score_breakdown",
+        "confidence",
+        "recommendation",
+        "strengths",
+        "evidence",
+        "gaps",
+        "interview_questions",
+    }
+    missing = sorted(required - assessment.keys())
+    if missing:
+        raise ValueError(f"AI assessment is missing fields: {', '.join(missing)}")
+
+    evidence = assessment.get("evidence")
+    if not isinstance(evidence, list) or not evidence:
+        raise ValueError("AI assessment returned no grounded evidence")
+    for index, item in enumerate(evidence, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"AI evidence item {index} must be an object")
+        if not str(item.get("requirement", "")).strip():
+            raise ValueError(f"AI evidence item {index} has no requirement")
+        if not str(item.get("evidence", "")).strip():
+            raise ValueError(f"AI evidence item {index} has no quote or explanation")
+        if item.get("status") not in {"found", "missing"}:
+            raise ValueError(f"AI evidence item {index} has an invalid status")
+
+    questions = assessment.get("interview_questions")
+    if not isinstance(questions, list) or len(questions) < 2:
+        raise ValueError("AI assessment must return at least two interview questions")
+    if not isinstance(assessment.get("score_breakdown"), dict):
+        raise ValueError("AI assessment score_breakdown must be an object")
+    return assessment
+
+
 SKILLS = {
     "Python": ("python",),
     "FastAPI": ("fastapi",),
@@ -224,15 +264,15 @@ Trả về JSON hợp lệ bằng tiếng Việt với:
     for _ in range(2):
         try:
             assessment = normalize_assessment(
-                generate_structured_json(
-                    prompt,
-                    ASSESSMENT_SCHEMA["schema"],
-                    ASSESSMENT_SCHEMA["name"],
-                    temperature=0.2,
+                _validate_assessment_payload(
+                    generate_structured_json(
+                        prompt,
+                        ASSESSMENT_SCHEMA["schema"],
+                        ASSESSMENT_SCHEMA["name"],
+                        temperature=0.2,
+                    )
                 )
             )
-            if "evidence" not in assessment:
-                assessment["evidence"] = []
             assessment.update(
                 {
                     "analysis_mode": AI_PROVIDER,

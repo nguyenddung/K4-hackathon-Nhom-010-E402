@@ -77,7 +77,7 @@ def test_candidate_assessment_reports_underlying_error(monkeypatch) -> None:
     assert "gemini schema mismatch" in result["fallback_reason"]
 
 
-def test_candidate_assessment_accepts_missing_evidence(monkeypatch) -> None:
+def test_candidate_assessment_rejects_missing_evidence(monkeypatch) -> None:
     def fake_structured_json(*args, **kwargs):
         return {
             "summary": "Không có bằng chứng rõ ràng.",
@@ -93,8 +93,9 @@ def test_candidate_assessment_accepts_missing_evidence(monkeypatch) -> None:
 
     result = candidate_assessment("Backend developer", "CV mẫu", 70)
 
-    assert result["analysis_mode"] == "gemini" or result["analysis_mode"] == "openai"
-    assert result["evidence"] == []
+    assert result["analysis_mode"] == "fallback"
+    assert result["evidence"]
+    assert "missing fields: evidence" in result["fallback_reason"]
 
 
 def test_database_migration_creates_cv_rag_tables(tmp_path, monkeypatch) -> None:

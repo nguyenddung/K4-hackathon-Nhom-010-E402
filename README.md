@@ -257,20 +257,20 @@ $result = Invoke-RestMethod `
 
 ## API chính
 
-| Method | Endpoint | Chức năng |
-| --- | --- | --- |
-| `GET` | `/health` | Kiểm tra backend, provider và model |
-| `POST` | `/auth/login` | Đăng nhập và lấy Bearer token |
-| `POST` | `/auth/register` | Tạo tài khoản HR |
-| `GET/POST` | `/jobs` | Danh sách và tạo job |
-| `GET/POST` | `/candidates` | Quản lý candidate |
-| `POST` | `/candidates/upload` | Upload và screening theo workflow candidate |
-| `POST` | `/candidates/{id}/rescreen` | Chạy lại đánh giá candidate |
-| `POST` | `/cv/upload` | Parse, chunk và embedding CV local |
-| `POST` | `/cv/{id}/analyze` | RAG theo rubric với provider đã chọn |
-| `PUT` | `/candidates/{id}/decision` | Lưu quyết định của HR |
-| `GET` | `/analytics` | Thống kê |
-| `GET` | `/audit` | Audit log |
+| Method       | Endpoint                      | Chức năng                                  |
+| ------------ | ----------------------------- | -------------------------------------------- |
+| `GET`      | `/health`                   | Kiểm tra backend, provider và model        |
+| `POST`     | `/auth/login`               | Đăng nhập và lấy Bearer token           |
+| `POST`     | `/auth/register`            | Tạo tài khoản HR                          |
+| `GET/POST` | `/jobs`                     | Danh sách và tạo job                      |
+| `GET/POST` | `/candidates`               | Quản lý candidate                          |
+| `POST`     | `/candidates/upload`        | Upload và screening theo workflow candidate |
+| `POST`     | `/candidates/{id}/rescreen` | Chạy lại đánh giá candidate             |
+| `POST`     | `/cv/upload`                | Parse, chunk và embedding CV local          |
+| `POST`     | `/cv/{id}/analyze`          | RAG theo rubric với provider đã chọn     |
+| `PUT`      | `/candidates/{id}/decision` | Lưu quyết định của HR                   |
+| `GET`      | `/analytics`                | Thống kê                                   |
+| `GET`      | `/audit`                    | Audit log                                    |
 
 Ngoại trừ health check và các route xác thực, API yêu cầu:
 
